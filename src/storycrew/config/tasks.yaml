@@ -1,0 +1,516 @@
+# Story Generation Tasks Configuration
+# Tasks for novel generation with romance and mystery genres
+
+# ==================== INITIALIZATION PHASE TASKS ====================
+
+build_story_spec:
+  description: >
+    根据用户输入的题材（genre: {genre}）和主题句（theme_statement: {theme_statement}），
+    首先生成一个吸引人的小说名称（2-8个中文字符），然后创建完整的故事规格（StorySpec）和风格指南（StyleGuide）。
+
+    用户可能还提供了其他偏好：{additional_preferences}
+
+    **第一步：生成小说名称**
+    - 根据{genre}题材和{theme_statement}主题
+    - 生成一个简短、吸引人、符合题材特点的小说名称
+    - 名称长度：2-8个中文字符
+    - 爱情题材示例：《心动时刻》、《错位的我们》、《职场迷情》
+    - 悬疑题材示例：《迷雾背后》、《最后一名证人》、《消失的档案》
+    - 避免过于俗套的名称，要有一定文学性或悬念感
+
+    **第二步：创建StorySpec**
+    1. 确定题材是"romance"（都市职场爱情）还是"mystery"（本格/社会派悬疑）
+    2. 设置叙事视角为第三人称
+    3. 总章数：9章，每章目标3000字（允许±10%）
+    4. 语言：中文
+    5. 基调：现实、细腻、有张力
+    6. 禁忌：未成年人性内容、过度血腥细节、仇恨/歧视性表达
+    7. 必须包含：章末钩子、每章信息增量、每章情绪转折
+
+    对于爱情题材额外设置：
+    - relationship_arc: 从陌生/互斥 → 接近 → 绑定 → 破裂 → 选择/牺牲 → 终局
+    - emotional_turns_per_chapter: 1
+
+    对于悬疑题材额外设置：
+    - mystery_question: 一句话概括核心谜题
+    - clue_budget_rule: 每章至少1条可见线索入库
+    - fair_play_rule: 终局解答所用关键线索必须在前文出现
+
+    **输出格式要求（严格遵守）：**
+
+    输出必须是严格的JSON格式，首先包含novel_name字段，然后是完整的StorySpec对象。
+
+    **⚠️ 重要JSON格式要求（必须遵守）：**
+    1. 所有键名（property names）必须用双引号包围
+    2. ❌ 错误示例：`chapter_word_tolerance: 0.1`
+    3. ✅ 正确示例：`"chapter_word_tolerance": 0.1`
+    4. ❌ 错误示例：`{prop: "value"}`
+    5. ✅ 正确示例：`{"prop": "value"}`
+    6. 确保JSON完全符合标准格式，可以使用JSON验证器检查
+    7. 不要包含JSON之外的任何文字说明
+
+  expected_output: >
+    严格JSON格式（所有键名必须用双引号包围），包含两个字段：
+    {
+      "novel_name": "小说名称（2-8个中文字符）",
+      "story_spec": {
+        "language": "zh",
+        "genre": "romance"或"mystery",
+        "subgenre": "urban_workplace"等,
+        "total_chapters": 9,
+        "target_words_per_chapter": 3000,
+        "chapter_word_tolerance": 0.1,
+        "narration": {"pov": "third_person"},
+        "style": {StyleGuide对象},
+        "taboos": [...],
+        "must_have": [...],
+        "theme_statement": "{theme_statement}",
+        "ending_contract": "...",
+        ...其他题材特定字段
+      }
+    }
+
+    不要包含任何JSON之外的文字。
+  agent: theme_interpreter
+
+build_concept:
+  description: >
+    基于StorySpec创建人物概念和关系网络。
+
+    题材：{genre}
+    主题句：{theme_statement}
+    StorySpec: {story_spec}
+
+    对于爱情题材（都市职场）：
+    1. 设计2-3个主要人物（主角、配角）
+    2. 每个人物包含：name, role, age, occupation, personality (列表),
+       motivation, secrets (列表), speech_pattern, forbidden_phrases, backstory, arc_description
+    3. 设计人物关系（relationship_type, status, history, development_plan）
+    4. 设计职场生态：公司/组织背景、角色职责、权力关系
+    5. 设计情感阻碍机制：阶层差异/误会/价值观冲突/过往创伤
+
+    对于悬疑题材（本格/社会派）：
+    1. 设计主要人物（侦探、嫌疑人、受害者等）
+    2. 设计嫌疑人池（3-5人，含动机和可疑点）
+    3. 设计核心谜题（mystery_question）和真相草案（truth_solution）
+    4. 设计动机链：每个嫌疑人的作案动机
+    5. 设计误导点（red_herrings）：3-5个，必须可合理解释
+
+    输出格式：
+    {
+      "characters": [人物对象列表],
+      "relationships": [关系对象列表],
+      "workplace_ecosystem": {...} (爱情) OR "suspect_pool": {...} (悬疑),
+      "core_conflict": "...",
+      "truth_card_draft": {...} (悬疑，仅内部使用)
+    }
+  expected_output: >
+    严格JSON格式，包含characters数组、relationships数组、
+    workplace_ecosystem (爱情) 或 suspect_pool (悬疑)、core_conflict。
+    每个人物必须包含完整的字段。不要包含JSON之外的文字。
+  agent: concept_designer
+
+build_outline:
+  description: >
+    基于StorySpec和人物概念设计完整的三幕九章大纲。
+
+    StorySpec: {story_spec}
+    Concept: {concept}
+
+    你需要创建9章大纲，每章包含：
+    - chapter_number, title, summary
+    - goals (本章目标列表)
+    - conflict (本章主要冲突)
+    - information_increment (本章新增的信息/认知变化)
+    - emotional_increment (本章情绪变化)
+    - chapter_hook (章末钩子，必须抓人)
+    - plants_this_chapter (埋设的伏笔)
+    - payoffs_this_chapter (回收的伏笔)
+    - scenes (简略场景列表，每个场景包含scene_purpose, conflict, information_gain, emotional_shift)
+    - target_words: 3000
+
+    三幕结构：
+    第一幕（第1-3章）- 建立与触发：
+    - 第1章：日常破裂 + 主角欲望（提出核心缺失/渴望；埋第一层伏笔）
+    - 第2章：相遇/案件引爆 + 代价（爱情相遇机制；悬疑案发/委托）
+    - 第3章：第一次转折/进入新世界（主角做不可逆选择；章末强钩子）
+
+    第二幕（第4-6章）- 对抗与加深：
+    - 第4章：推进与试探（关系升温/线索扩张；埋关键误导）
+    - 第5章：中点反转（真相一部分揭开/关系定性；"换一套理解"）
+    - 第6章：代价升级 + 失去（分离/背叛/误会加深；重大误判）
+
+    第三幕（第7-9章）- 崩塌与解决：
+    - 第7章：全盘崩塌/最低谷（主角失去最大依靠）
+    - 第8章：真相/和解的路径/最终计划（回收核心伏笔，走向对决）
+    - 第9章：终局兑现主题 + 余韵（主冲突解决；主题落地；留余味）
+
+    同时创建PlantPayoffTable（伏笔-回收表）：
+    {
+      "plant_payoff_table": [
+        {
+          "plot_element": "伏笔内容",
+          "planted_chapter": 1,
+          "payoff_chapter": 7,
+          "payoff_type": "reveal/twist/resolution",
+          "status": "planted"
+        }
+      ]
+    }
+
+    对于悬疑题材，还要生成TruthCard（真相卡）：
+    {
+      "truth_card": {
+        "crime": "...",
+        "perpetrator": "...",
+        "motive": "...",
+        "method": "...",
+        "key_clues": [...],
+        "red_herrings_explained": [...]
+      }
+    }
+  expected_output: >
+    严格JSON格式：
+    {
+      "outline": [9个ChapterOutline对象],
+      "plant_payoff_table": [PlantPayoffEntry对象数组],
+      "truth_card": {...} (悬疑题材)
+    }
+
+    每章必须有明确的信息增量和情绪增量。
+    章末钩子必须强有力，勾住读者。
+    不要包含JSON之外的文字。
+  agent: plot_architect
+
+init_bible:
+  description: >
+    初始化StoryBible，吸收StorySpec、Concept和Outline的信息。
+
+    StorySpec: {story_spec}
+    Concept: {concept}
+    Outline: {outline}
+
+    创建StoryBible结构：
+    - characters: 从Concept导入人物
+    - relationships: 从Concept导入关系
+    - clues: {planted: [], resolved: [], open: []} (悬疑)
+    - timeline: []
+    - chapter_summaries: []
+    - immutable_facts: []
+    - used_imagery: []
+    - used_metaphors: []
+    - genre: "romance" or "mystery"
+    - truth_card: (悬疑，从Outline导入，仅限内部Agent访问)
+  expected_output: >
+    严格JSON格式的StoryBible对象，已初始化所有必需字段。
+    不要包含JSON之外的文字。
+  agent: continuity_keeper
+
+# ==================== CHAPTER GENERATION TASKS ====================
+
+plan_chapter:
+  description: >
+    为第{chapter_number}章创建详细的SceneList（场景列表）。
+
+    当前章节：{chapter_number}
+    章节大纲：{chapter_outline}
+    StoryBible: {story_bible}
+    StorySpec: {story_spec}
+
+    你需要把章纲细化为6-10个详细的场景，每个场景包含：
+    - scene_number (1-10)
+    - purpose (场景目的：推进事件/揭示信息/触发情绪)
+    - setting (场景地点/时间)
+    - characters (出场人物)
+    - conflict (场景内的冲突)
+    - action_beat (动作节拍)
+    - dialogue_focus (对白重点)
+    - information_revealed (揭示的信息)
+    - emotional_shift (情绪变化)
+    - plot_advancement (情节推进)
+    - exit_hook (出口钩子，如何过渡到下一场)
+    - target_words (字数目标，建议400-600字)
+    - notes (备注)
+
+    同时设置章节级别：
+    - chapter_goal: 本章整体目标
+    - required_emotional_arc: 本章情绪弧线
+    - clues_to_plant: (悬疑) 本章要埋设的线索
+    - clues_to_reveal: (悬疑) 本章要揭示的线索
+    - plot_points_to_advance: 本章要推进的情节点
+
+    确保场景之间有自然的过渡，节奏紧凑，不拖沓。
+    每个场景都应该"三件事同时发生"：推进事件、揭示信息、触发情绪。
+  expected_output: >
+    严格JSON格式的SceneList对象：
+    {
+      "chapter_number": {chapter_number},
+      "chapter_title": "...",
+      "scenes": [6-10个Scene对象],
+      "total_target_words": 3000,
+      "chapter_goal": "...",
+      "required_emotional_arc": "...",
+      "clues_to_plant": [],
+      "clues_to_reveal": [],
+      "plot_points_to_advance": []
+    }
+
+    不要包含JSON之外的文字。
+  agent: chapter_planner
+
+write_chapter:
+  description: >
+    撰写第{chapter_number}章的完整正文。
+
+    当前章节：{chapter_number}
+    SceneList: {scene_list}
+    StoryBible: {story_bible}
+    StorySpec: {story_spec}
+    修订指令（如有）：{revision_instructions}
+
+    输出格式要求：
+
+    第X章：章标题
+    小引：80-150字，像书摘/预告，不剧透终局
+    正文：约3000字（允许2700-3300字），章末必须有钩子
+
+    写作要求：
+    1. 严格按照SceneList的场景顺序和场景目的写作
+    2. 开头抓人，立即进入冲突或张力
+    3. 每个场景推进事件、揭示信息、触发情绪
+    4. 对白要符合人物声线（参考StoryBible中character的speech_pattern）
+    5. 避免使用人物禁用短语（forbidden_phrases）
+    6. 章末必须有强钩子（悬念、反转、新威胁）
+    7. 字数控制在2700-3300之间
+
+    对于悬疑题材：
+    - 只能访问"本章允许揭示的信息"
+    - 不能提前泄露真相
+    - 线索要自然嵌入场景
+
+    如果收到revision_instructions，针对性地重写问题段落。
+  expected_output: >
+    完整的章节正文，格式如下：
+
+    第X章：[章标题]
+
+    小引：
+    [80-150字的小引]
+
+    [约3000字的正文，包含6-10个场景，章末有钩子]
+
+    确保字数在2700-3300之间。
+  agent: chapter_writer
+
+update_bible:
+  description: >
+    更新StoryBible，提取第{chapter_number}章的新信息。
+
+    当前章节：{chapter_number}
+    前序任务已生成章节正文，请从上下文中获取。
+    StoryBible: {story_bible}
+    StorySpec: {story_spec}
+
+    你需要：
+    1. 提取新事实：新增的不可更改事实，加入immutable_facts
+    2. 更新时间线：创建TimelineEvent对象，记录本章发生的关键事件
+    3. 更新人物状态：记录人物的变化、新秘密、关系变化
+    4. 提取线索（悬疑）：识别新线索，加入clues.planted；
+       识别回收的线索，移至clues.resolved
+    5. 生成章摘要：80-150字，概括本章关键事件和变化
+    6. 追踪意象：记录本章使用的主要意象和比喻，加入used_imagery和used_metaphors
+
+    对于悬疑题材：
+    - 识别所有线索句（包含信息的细节、对话、物品等）
+    - 判断是否为red_herring（误导）
+    - 更新clues.planted, clues.resolved, clues.open
+
+    返回更新后的完整StoryBible。
+  expected_output: >
+    严格JSON格式的更新后的StoryBible对象。
+    包含更新后的characters, relationships, timeline, clues, chapter_summaries等。
+    不要包含JSON之外的文字。
+  agent: continuity_keeper
+
+edit_chapter:
+  description: >
+    对第{chapter_number}章进行文风和节奏编辑。
+
+    当前章节：{chapter_number}
+    前序任务已生成章节正文，请从上下文中获取。
+    StoryBible: {story_bible}
+    StorySpec: {story_spec}
+    修订指令（如有）：{revision_instructions}
+
+    基于StyleGuide进行编辑：
+    1. 统一文风：确保语气、节奏、意象密度符合StyleGuide
+    2. 减少重复：删除冗余表达、重复句式
+    3. 增强画面：加强描写，让场景更生动
+    4. 统一人物声线：确保对白符合character的speech_pattern
+    5. 优化节奏：删除拖沓部分，加快节奏
+    6. 避免重复意象：检查StoryBible.used_imagery，避免重复使用相同意象
+
+    不要修改大结构，只做局部重写和润色。
+    如果收到revision_instructions，针对性地修改指定问题。
+  expected_output: >
+    润色后的完整章节正文，保持原有格式：
+
+    第X章：[章标题]
+
+    小引：
+    [润色后的小引]
+
+    [润色后的正文，约3000字，文笔更精炼、节奏更紧凑]
+
+    确保字数仍在2700-3300之间。
+  agent: line_editor
+
+judge_chapter:
+  description: >
+    对第{chapter_number}章进行质量评审，输出JSON格式的评审报告。
+
+    当前章节：{chapter_number}
+    前序任务已生成章节正文，请从上下文中获取。
+    StoryBible: {story_bible}
+    StorySpec: {story_spec}
+
+    评审维度（0-10分）：
+    1. continuity (连续性)：是否有与StoryBible矛盾的地方
+    2. pacing (节奏)：节奏是否合适，有无拖沓
+    3. character_motivation (人物动机)：人物行为是否合理，动机是否清晰
+    4. genre_fulfillment (类型满足度)：是否符合爱情/悬疑题材的要求
+    5. prose (文笔)：文笔是否通顺、有感染力
+    6. hook (钩子)：章末是否有强钩子
+    7. clue_fairness (悬疑专属)：线索是否公平，读者能否合理推理
+
+    硬性检查：
+    1. safety_pass: 是否通过安全合规检查（无违规内容）
+    2. continuity_conflicts: 连续性矛盾列表（如果有）
+    3. word_count_in_range: 字数是否在2700-3300之间
+
+    通过标准：
+    - 爱情题材：character_motivation >= 7 AND pacing >= 7 AND hook >= 7 AND genre_fulfillment >= 7
+    - 悬疑题材：上述条件 AND clue_fairness >= 7
+    - 硬性：safety_pass = true AND continuity_conflicts为空 AND word_count_in_range = true
+
+    如果不通过，必须提供：
+    1. issues: 问题列表，每个问题包含type（类型）、severity（严重程度）、note（说明）
+    2. revision_instructions: 可执行的修订指令列表
+
+    输出必须是严格的JSON格式。
+  expected_output: >
+    严格JSON格式的JudgeReport对象：
+    {
+      "chapter": {chapter_number},
+      "word_count": 实际字数,
+      "scores": {
+        "continuity": 0-10,
+        "pacing": 0-10,
+        "character_motivation": 0-10,
+        "genre_fulfillment": 0-10,
+        "prose": 0-10,
+        "hook": 0-10,
+        "clue_fairness": 0-10 (悬疑)
+      },
+      "hard_fail": {
+        "safety_pass": true/false,
+        "continuity_conflicts": [],
+        "word_count_in_range": true/false
+      },
+      "passed": true/false,
+      "issues": [Issue对象数组],
+      "revision_instructions": ["修订指令1", "修订指令2"],
+      "strengths": ["优点1", "优点2"]
+    }
+
+    不要包含JSON之外的任何文字。
+  agent: critic_judge
+
+# ==================== FINAL ASSEMBLY TASKS ====================
+
+judge_whole_book:
+  description: >
+    对全书进行最终评审，检查伏笔回收、主题兑现、连续性。
+
+    全书正文：{book_text}
+    StoryBible: {story_bible}
+    StorySpec: {story_spec}
+
+    检查项：
+    1. plant_payoff_coverage: 伏笔回收率（已回收/总伏笔，要求≥95%）
+    2. theme_delivery: 主题兑现度（0-10分，是否实现theme_statement）
+    3. ending_satisfaction: 结局满意度（0-10分）
+    4. continuity: 全书连续性扫描
+    5. character_arc_consistency: 人物弧光一致性
+
+    对于悬疑题材额外检查：
+    1. clue_fairness_whole: 全书线索公平性
+    2. truth_reveal_quality: 真相揭示的质量
+
+    通过标准：
+    - plant_payoff_coverage >= 0.95
+    - theme_delivery >= 8
+    - ending_satisfaction >= 8
+    - 无连续性矛盾
+
+    如果不通过，提供targeted_patch_instructions。
+  expected_output: >
+    严格JSON格式：
+    {
+      "is_whole_book": true,
+      "plant_payoff_coverage": 0.95,
+      "theme_delivery": 8,
+      "ending_satisfaction": 8,
+      "scores": {...},
+      "hard_fail": {...},
+      "passed": true/false,
+      "issues": [...],
+      "revision_instructions": [...],
+      "strengths": [...]
+    }
+
+    不要包含JSON之外的文字。
+  agent: critic_judge
+
+assemble_book:
+  description: >
+    将9章正文组装成最终小说，添加标题、简介、目录。
+
+    全书正文：{book_text}
+    StorySpec: {story_spec}
+    StoryBible: {story_bible}
+
+    创建完整的小说文档，包含：
+    1. 书名（根据主题生成）
+    2. 简介（80-150字，不剧透）
+    3. 目录（9章标题）
+    4. 正文（9章完整内容）
+  expected_output: >
+    完整的小说文档，格式如下：
+
+    # [书名]
+
+    ## 简介
+    [简介内容]
+
+    ## 目录
+    第1章 [标题]
+    第2章 [标题]
+    ...
+    第9章 [标题]
+
+    ## 正文
+
+    第1章：[标题]
+    [第1章完整内容]
+
+    第2章：[标题]
+    [第2章完整内容]
+
+    ...
+
+    第9章：[标题]
+    [第9章完整内容]
+
+    [全书完]
+  agent: line_editor
