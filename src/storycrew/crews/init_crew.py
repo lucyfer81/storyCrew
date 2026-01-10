@@ -1,10 +1,104 @@
 """Initialization Crew for story generation setup."""
 from crewai import Crew, Process, Agent, Task
-from storycrew.crew import Storycrew
-import json
-import re
-import sys
+from storycrew.crew import Storycrew, repair_json
+from storycrew.models import StorySpecWithResult, Concept
 from typing import Dict, Any
+import logging
+import json
+
+logger = logging.getLogger("StoryCrew")
+
+
+def sanitize_concept_json(json_str: str) -> str:
+    """
+    Fix common LLM errors in Concept generation.
+
+    Fixes the case where forbidden_phrases array is accidentally nested
+    inside secrets array, causing Pydantic validation errors.
+
+    Args:
+        json_str: The JSON string to sanitize
+
+    Returns:
+        Sanitized JSON string
+    """
+    try:
+        data = json.loads(json_str)
+    except (json.JSONDecodeError, TypeError):
+        return json_str  # If not valid JSON, return as-is
+
+    # Fix characters.secrets - flatten nested lists that shouldn't be there
+    if 'characters' in data and isinstance(data['characters'], list):
+        for char in data['characters']:
+            if isinstance(char, dict) and 'secrets' in char:
+                secrets = char['secrets']
+                if isinstance(secrets, list):
+                    sanitized_secrets = []
+                    for item in secrets:
+                        if isinstance(item, str):
+                            sanitized_secrets.append(item)
+                        elif isinstance(item, list):
+                            # Convert nested list to comma-separated string
+                            # This fixes the LLM error where forbidden_phrases gets nested in secrets
+                            sanitized_secrets.append(", ".join(str(x) for x in item))
+                        else:
+                            # Fallback: convert to string
+                            sanitized_secrets.append(str(item))
+                    char['secrets'] = sanitized_secrets
+
+    return json.dumps(data, ensure_ascii=False)
+
+# Monkey-patch CrewAI's converter to apply JSON repairs
+import crewai.utilities.converter as converter_module
+_original_handle_partial_json = converter_module.handle_partial_json
+
+def _patched_handle_partial_json(result: str, model: type, is_json_output: bool = False,
+                                 agent=None, converter_cls=None):
+    """Wrapper that applies JSON repairs before CrewAI parses.
+
+    Args:
+        result: The raw LLM output string
+        model: The Pydantic model to validate against
+        is_json_output: Whether this is JSON output mode
+        agent: The agent instance (unused but passed by CrewAI)
+        converter_cls: The converter class (unused but passed by CrewAI)
+
+    Returns:
+        Validated Pydantic model instance
+    """
+    # Apply Concept-specific sanitization for nested list bug
+    working_result = result
+    if model == Concept:
+        working_result = sanitize_concept_json(str(result))
+        if working_result != str(result):
+            logger.info("[CONCEPT SANITIZE] Applied Concept-specific sanitization for nested list bug")
+
+    try:
+        # Try original parsing first
+        return _original_handle_partial_json(working_result, model, is_json_output, agent, converter_cls)
+    except Exception as e:
+        # If parsing fails, try to repair and retry
+        logger.info(f"[JSON REPAIR] Parse failed, attempting repair. Error: {str(e)[:100]}")
+        logger.info(f"[JSON REPAIR] Original output (first 200 chars): {str(working_result)[:200]}")
+
+        # Apply repairs
+        repaired = repair_json(str(working_result))
+
+        # For Concept model, apply sanitization again after repair
+        if model == Concept:
+            repaired = sanitize_concept_json(repaired)
+
+        if repaired != str(working_result):
+            logger.info(f"[JSON REPAIR] Repaired output (first 200 chars): {repaired[:200]}")
+            # Retry with repaired JSON
+            return _original_handle_partial_json(repaired, model, is_json_output, agent, converter_cls)
+        else:
+            logger.info("[JSON REPAIR] No repairs applied, re-raising original error")
+            raise
+
+# Apply the monkey-patch
+converter_module.handle_partial_json = _patched_handle_partial_json
+logger.info("[JSON REPAIR] Monkey-patch applied to CrewAI converter")
 
 
 class InitCrew:
@@ -13,99 +107,9 @@ class InitCrew:
     def __init__(self):
         self.base_crew = Storycrew()
 
-    def _extract_json_from_output(self, output: str) -> Dict[str, Any]:
-        """Extract JSON from LLM output."""
-        # Import json_repair for robust JSON parsing
-        try:
-            from json_repair import repair_json
-        except ImportError:
-            repair_json = None
-            print("⚠ Warning: json_repair library not available, using basic parsing", file=sys.stderr)
-
-        # Try to extract JSON from markdown code blocks (enhanced to tolerate whitespace)
-        json_pattern = r'```json\s*\n(.*?)\n```'
-        matches = re.findall(json_pattern, output, re.DOTALL)
-        if matches:
-            try:
-                if repair_json:
-                    return json.loads(repair_json(matches[0]))
-                return json.loads(matches[0])
-            except json.JSONDecodeError:
-                pass
-
-        # Try to extract JSON from plain code blocks (enhanced to tolerate whitespace)
-        code_pattern = r'```\s*\n(.*?)\n```'
-        matches = re.findall(code_pattern, output, re.DOTALL)
-        if matches:
-            try:
-                if repair_json:
-                    return json.loads(repair_json(matches[0]))
-                return json.loads(matches[0])
-            except json.JSONDecodeError:
-                pass
-
-        # Try to parse as plain JSON
-        try:
-            if repair_json:
-                return json.loads(repair_json(output))
-            return json.loads(output)
-        except json.JSONDecodeError:
-            pass
-
-        # Return raw output if no JSON found
-        result_dict = {"raw_output": output}
-
-        # Fix A: Enhanced parsing - use json_repair to handle malformed JSON
-        # This handles cases where LLM returns JSON with common formatting errors
-        if result_dict.get("raw_output") and repair_json:
-            try:
-                raw_str = result_dict["raw_output"]
-
-                # Use json_repair to fix common LLM JSON errors:
-                # - Unquoted property names (e.g., "prop: value" → '"prop": value')
-                # - Trailing commas
-                # - Comments in JSON
-                # - Missing quotes around string values
-                # - Single quotes instead of double quotes
-                repaired_json = repair_json(raw_str)
-                inner_json = json.loads(repaired_json)
-
-                # If it contains expected keys, use it
-                if isinstance(inner_json, dict) and any(key in inner_json for key in ["novel_name", "story_spec", "outline", "plant_payoff_table"]):
-                    import sys
-                    print(f"✓ Successfully repaired malformed JSON using json_repair", file=sys.stderr)
-                    return inner_json
-            except (json.JSONDecodeError, TypeError, ValueError) as e:
-                # If parsing fails even after repair, return the original result_dict with raw_output
-                # Log the error for debugging (but don't crash)
-                import sys
-                print(f"⚠ Warning: Failed to parse raw_output JSON even with json_repair: {e}", file=sys.stderr)
-                pass
-
-        return result_dict
-
-    def _parse_crew_output(self, crew_output) -> Dict[str, Any]:
-        """Parse CrewOutput object to extract JSON result."""
-        # Convert CrewOutput to string
-        if hasattr(crew_output, 'raw'):
-            result_str = str(crew_output.raw)
-        elif hasattr(crew_output, 'result'):
-            result_str = str(crew_output.result)
-        elif hasattr(crew_output, 'outputs'):
-            # If it's a dict with outputs key
-            outputs = crew_output.outputs
-            if outputs and len(outputs) > 0:
-                result_str = str(list(outputs.values())[0])
-            else:
-                result_str = str(crew_output)
-        else:
-            result_str = str(crew_output)
-
-        return self._extract_json_from_output(result_str)
-
     def kickoff(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Run the initialization phase.
+        Run the initialization phase with structured outputs.
 
         Args:
             inputs: Dictionary containing:
@@ -115,35 +119,32 @@ class InitCrew:
 
         Returns:
             Dictionary containing:
-                - story_spec: StorySpec object (as dict)
-                - concept: Concept design (as dict)
-                - outline: Complete 9-chapter outline (as dict)
-                - story_bible: Initialized StoryBible (as dict)
+                - novel_name: Generated novel name
+                - story_spec: StorySpec object
+                - concept: Concept design object
+                - outline: Complete 9-chapter outline object
+                - story_bible: Initialized StoryBible object
         """
-        # Add placeholder values for template variables that agents expect but don't exist yet
-        inputs_with_placeholders = {
-            **inputs,
-            "StorySpec": "{}",  # Will be generated by first task
-            "StyleGuide": "{}",  # Will be generated by first task
-            "Concept": "{}",  # Will be generated by second task
-            "StoryBible": "{}",  # Will be generated by fourth task
-            "Outline": "{}",  # Will be generated by third task
-            "PlantPayoffTable": "[]",  # Will be generated by third task
-        }
-
         # Get agents
         theme_interpreter = self.base_crew.theme_interpreter()
         concept_designer = self.base_crew.concept_designer()
         plot_architect = self.base_crew.plot_architect()
         continuity_keeper = self.base_crew.continuity_keeper()
 
-        # Task 1: Build StorySpec
-        build_story_spec_task = Task(
-            description=self.base_crew.tasks_config['build_story_spec']['description'],
-            expected_output=self.base_crew.tasks_config['build_story_spec']['expected_output'],
-            agent=theme_interpreter,
-            callback=lambda output: self._extract_json_from_output(output) if isinstance(output, str) else output
-        )
+        # Prepare inputs with placeholders
+        inputs_with_placeholders = {
+            **inputs,
+            "StorySpec": None,
+            "StyleGuide": None,
+            "Concept": None,
+            "StoryBible": None,
+            "Outline": None,
+            "PlantPayoffTable": None,
+        }
+
+        # Task 1: Build StorySpec - Use pre-configured task from base_crew
+        build_story_spec_task = self.base_crew.build_story_spec()
+        build_story_spec_task.agent = theme_interpreter
 
         crew1 = Crew(
             agents=[theme_interpreter],
@@ -151,24 +152,22 @@ class InitCrew:
             verbose=True
         )
 
-        story_spec_result = crew1.kickoff(inputs=inputs_with_placeholders)
-        story_spec_dict = self._parse_crew_output(story_spec_result)
+        # The monkey-patched converter will automatically repair JSON on parse errors
+        result1 = crew1.kickoff(inputs=inputs_with_placeholders)
+        spec_result = result1.tasks_output[0].pydantic  # StorySpecWithResult
+        novel_name = spec_result.novel_name
+        story_spec = spec_result.story_spec
 
-        # Prepare inputs for next task
-        # Note: need both lowercase (for tasks) and capitalized (for agents) versions
+        # Prepare inputs for next task - convert Pydantic to dict for CrewAI
         inputs_2 = {
             **inputs,
-            "story_spec": json.dumps(story_spec_dict.get("story_spec", story_spec_dict), ensure_ascii=False),
-            "StorySpec": json.dumps(story_spec_dict.get("story_spec", story_spec_dict), ensure_ascii=False),
-            "StyleGuide": json.dumps(story_spec_dict.get("story_spec", story_spec_dict).get("style", {}), ensure_ascii=False)
+            "story_spec": story_spec.model_dump(),
+            "StorySpec": story_spec.model_dump(),
         }
 
-        # Task 2: Build Concept
-        build_concept_task = Task(
-            description=self.base_crew.tasks_config['build_concept']['description'],
-            expected_output=self.base_crew.tasks_config['build_concept']['expected_output'],
-            agent=concept_designer
-        )
+        # Task 2: Build Concept - Use pre-configured task from base_crew
+        build_concept_task = self.base_crew.build_concept()
+        build_concept_task.agent = concept_designer
 
         crew2 = Crew(
             agents=[concept_designer],
@@ -176,22 +175,19 @@ class InitCrew:
             verbose=True
         )
 
-        concept_result = crew2.kickoff(inputs=inputs_2)
-        concept_dict = self._parse_crew_output(concept_result)
+        result2 = crew2.kickoff(inputs=inputs_2)
+        concept = result2.tasks_output[0].pydantic  # Direct Pydantic object
 
-        # Prepare inputs for next task
+        # Prepare inputs for next task - convert Pydantic to dict for CrewAI
         inputs_3 = {
             **inputs_2,
-            "concept": json.dumps(concept_dict, ensure_ascii=False),
-            "Concept": json.dumps(concept_dict, ensure_ascii=False)
+            "concept": concept.model_dump(),
+            "Concept": concept.model_dump(),
         }
 
-        # Task 3: Build Outline
-        build_outline_task = Task(
-            description=self.base_crew.tasks_config['build_outline']['description'],
-            expected_output=self.base_crew.tasks_config['build_outline']['expected_output'],
-            agent=plot_architect
-        )
+        # Task 3: Build Outline - Use pre-configured task from base_crew
+        build_outline_task = self.base_crew.build_outline()
+        build_outline_task.agent = plot_architect
 
         crew3 = Crew(
             agents=[plot_architect],
@@ -199,31 +195,20 @@ class InitCrew:
             verbose=True
         )
 
-        outline_result = crew3.kickoff(inputs=inputs_3)
-        outline_dict = self._parse_crew_output(outline_result)
+        result3 = crew3.kickoff(inputs=inputs_3)
+        outline = result3.tasks_output[0].pydantic  # Direct Pydantic object
 
-        # Prepare inputs for next task
-        # Optimize: Only pass data that init_bible actually needs
-        # init_bible requires: plant_payoff_table and truth_card (for mystery)
-        # It does NOT need the full outline with all chapter details
-        outline_for_bible = {
-            'plant_payoff_table': outline_dict.get('plant_payoff_table', []),
-            'truth_card': outline_dict.get('truth_card')
-        }
-
+        # Prepare inputs for next task - convert Pydantic to dict for CrewAI
         inputs_4 = {
             **inputs_3,
-            "outline": json.dumps(outline_for_bible, ensure_ascii=False),
-            "Outline": json.dumps(outline_for_bible, ensure_ascii=False),
-            "PlantPayoffTable": json.dumps(outline_dict.get("plant_payoff_table", []), ensure_ascii=False)
+            "outline": outline.model_dump(),
+            "Outline": outline.model_dump(),
+            "PlantPayoffTable": outline.plant_payoff_table,  # Already List[dict]
         }
 
-        # Task 4: Initialize Bible
-        init_bible_task = Task(
-            description=self.base_crew.tasks_config['init_bible']['description'],
-            expected_output=self.base_crew.tasks_config['init_bible']['expected_output'],
-            agent=continuity_keeper
-        )
+        # Task 4: Initialize Bible - Use pre-configured task from base_crew
+        init_bible_task = self.base_crew.init_bible()
+        init_bible_task.agent = continuity_keeper
 
         crew4 = Crew(
             agents=[continuity_keeper],
@@ -231,15 +216,15 @@ class InitCrew:
             verbose=True
         )
 
-        bible_result = crew4.kickoff(inputs=inputs_4)
-        bible_dict = self._parse_crew_output(bible_result)
+        result4 = crew4.kickoff(inputs=inputs_4)
+        story_bible = result4.tasks_output[0].pydantic  # Direct Pydantic object
 
-        # Combine all results
+        # Return all results
         return {
-            "novel_name": story_spec_dict.get("novel_name", "未命名小说"),
-            "story_spec": story_spec_dict.get("story_spec", story_spec_dict),
-            "concept": concept_dict,
-            "outline": outline_dict,
-            "story_bible": bible_dict,
-            "StoryBible": bible_dict  # Capitalized version for agents
+            "novel_name": novel_name,
+            "story_spec": story_spec,
+            "concept": concept,
+            "outline": outline,
+            "story_bible": story_bible,
+            "StoryBible": story_bible,  # Capitalized for agents
         }

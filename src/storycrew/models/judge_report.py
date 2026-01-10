@@ -1,12 +1,15 @@
 """Judge report models for quality gates."""
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from pydantic import BaseModel, Field
 
 
 class Issue(BaseModel):
     """Issue identified by critic."""
-    type: str  # pacing, structure, continuity, motivation, prose, etc.
-    severity: str  # low, medium, high, critical
+    type: Literal[
+        "continuity", "structure", "motivation", "pacing",
+        "clue_fairness", "prose", "hook", "safety", "word_count"
+    ]
+    severity: Literal["low", "medium", "high", "critical"]
     note: str = ""
     location: Optional[str] = None  # chapter/scene reference
 

@@ -1,10 +1,87 @@
 """Base crew configuration for StoryCrew."""
 import os
+import logging
 from dotenv import load_dotenv
 from crewai import Agent, Crew, Process, Task, LLM
 from crewai.project import CrewBase, agent, crew, task
 from crewai.agents.agent_builder.base_agent import BaseAgent
 from typing import List, Dict, Any
+
+logger = logging.getLogger("StoryCrew")
+
+
+def repair_json(json_str: str) -> str:
+    """
+    Attempt to repair common LLM JSON mistakes before parsing.
+
+    Uses the json_repair library to handle:
+    - Missing quotes on keys
+    - Trailing commas
+    - Single quotes instead of double
+    - Invalid escape sequences
+    - And many other JSON formatting issues
+
+    Returns:
+        Repaired JSON string, or original if repair fails
+    """
+    if not json_str:
+        return json_str
+
+    try:
+        from json_repair import repair_json as lib_repair_json
+
+        original = json_str
+        # Use the json_repair library to fix common LLM JSON mistakes
+        repaired = lib_repair_json(json_str, skip_json_loads=True)
+
+        if repaired != original:
+            logger.info("[JSON REPAIR] Applied repairs using json_repair library")
+
+        return repaired
+    except ImportError:
+        logger.warning("[JSON REPAIR] json_repair library not available, using original output")
+        return json_str
+    except Exception as e:
+        logger.info(f"[JSON REPAIR] Repair failed with error: {str(e)[:100]}")
+        return json_str
+
+
+# Simple interceptor to log LLM responses for debugging
+class LoggingInterceptor:
+    """Intercepts LLM responses to log raw output for debugging."""
+
+    def __init__(self):
+        self.request_count = 0
+
+    def __call__(self, request, response):
+        """Called by CrewAI after each LLM request/response."""
+        self.request_count += 1
+        logger.info(f"=" * 80)
+        logger.info(f"[LLM INTERCEPTOR] Request #{self.request_count}")
+        logger.info(f"[LLM INTERCEPTOR] Request URL: {request.url}")
+        logger.info(f"[LLM INTERCEPTOR] Request Method: {request.method}")
+        logger.info(f"[LLM INTERCEPTOR] Response Status: {response.status_code}")
+
+        # Try to get the response content
+        try:
+            if hasattr(response, 'text'):
+                logger.info(f"[LLM INTERCEPTOR] Response Text (first 2000 chars): {response.text[:2000]}")
+            elif hasattr(response, 'content'):
+                content = response.content.decode('utf-8', errors='ignore')
+                logger.info(f"[LLM INTERCEPTOR] Response Content (first 2000 chars): {content[:2000]}")
+        except Exception as e:
+            logger.info(f"[LLM INTERCEPTOR] Could not extract response content: {e}")
+
+        logger.info(f"=" * 80)
+        return response
+
+
+# Import Pydantic models for structured outputs
+from storycrew.models import (
+    StorySpec, StorySpecWithResult, Concept, BookOutline, StoryBible,
+    SceneList, ChapterDraft, ChapterRevision, JudgeReport,
+    FinalBook
+)
 
 # Load environment variables
 load_dotenv()
@@ -30,10 +107,17 @@ def get_llm():
         print(f"[DEBUG] Creating LLM with model: {llm_model}")
         print(f"[DEBUG] Base URL: {base_url}")
 
+        # Create interceptor for debugging
+        interceptor = LoggingInterceptor()
+
         _llm = LLM(
             model=llm_model,
             api_key=api_key,
-            base_url=base_url
+            base_url=base_url,
+            max_tokens=16384,  # Increased token limit for structured output
+            max_completion_tokens=16384,  # Alternative token limit parameter
+            temperature=0.0,  # Make output more deterministic
+            interceptor=interceptor  # Add logging interceptor
         )
     return _llm
 
@@ -56,7 +140,10 @@ def get_outline_llm():
         _outline_llm = LLM(
             model=llm_model,
             api_key=api_key,
-            base_url=base_url
+            base_url=base_url,
+            max_tokens=16384,  # Increased token limit for structured output
+            max_completion_tokens=16384,  # Alternative token limit parameter
+            temperature=0.0  # Make output more deterministic
         )
     return _outline_llm
 
@@ -78,7 +165,10 @@ def get_llm_by_env(env_var_name: str, default: str = "gpt-4o-mini"):
         _llm_cache[env_var_name] = LLM(
             model=llm_model,
             api_key=api_key,
-            base_url=base_url
+            base_url=base_url,
+            max_tokens=16384,  # Increased token limit for structured output
+            max_completion_tokens=16384,  # Alternative token limit parameter
+            temperature=0.0  # Make output more deterministic
         )
 
     return _llm_cache[env_var_name]
@@ -159,67 +249,78 @@ class Storycrew():
     @task
     def build_story_spec(self) -> Task:
         return Task(
-            config=self.tasks_config['build_story_spec']
+            config=self.tasks_config['build_story_spec'],
+            output_pydantic=StorySpecWithResult
         )
 
     @task
     def build_concept(self) -> Task:
         return Task(
-            config=self.tasks_config['build_concept']
+            config=self.tasks_config['build_concept'],
+            output_pydantic=Concept
         )
 
     @task
     def build_outline(self) -> Task:
         return Task(
-            config=self.tasks_config['build_outline']
+            config=self.tasks_config['build_outline'],
+            output_pydantic=BookOutline
         )
 
     @task
     def init_bible(self) -> Task:
         return Task(
-            config=self.tasks_config['init_bible']
+            config=self.tasks_config['init_bible'],
+            output_pydantic=StoryBible
         )
 
     @task
     def plan_chapter(self) -> Task:
         return Task(
-            config=self.tasks_config['plan_chapter']
+            config=self.tasks_config['plan_chapter'],
+            output_pydantic=SceneList
         )
 
     @task
     def write_chapter(self) -> Task:
         return Task(
-            config=self.tasks_config['write_chapter']
+            config=self.tasks_config['write_chapter'],
+            output_pydantic=ChapterDraft
         )
 
     @task
     def update_bible(self) -> Task:
         return Task(
-            config=self.tasks_config['update_bible']
+            config=self.tasks_config['update_bible'],
+            output_pydantic=StoryBible
         )
 
     @task
     def edit_chapter(self) -> Task:
         return Task(
-            config=self.tasks_config['edit_chapter']
+            config=self.tasks_config['edit_chapter'],
+            output_pydantic=ChapterRevision
         )
 
     @task
     def judge_chapter(self) -> Task:
         return Task(
-            config=self.tasks_config['judge_chapter']
+            config=self.tasks_config['judge_chapter'],
+            output_pydantic=JudgeReport
         )
 
     @task
     def judge_whole_book(self) -> Task:
         return Task(
-            config=self.tasks_config['judge_whole_book']
+            config=self.tasks_config['judge_whole_book'],
+            output_pydantic=JudgeReport
         )
 
     @task
     def assemble_book(self) -> Task:
         return Task(
-            config=self.tasks_config['assemble_book']
+            config=self.tasks_config['assemble_book'],
+            output_pydantic=FinalBook
         )
 
     # ==================== LEGACY SUPPORT ====================

@@ -9,6 +9,7 @@ import sys
 import warnings
 import json
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -149,39 +150,30 @@ def run(
         print()
 
         # Parse novel_name and story_spec from init_result
-        # The result should be a JSON string with novel_name and story_spec
+        # The result is a dict with Pydantic objects
         try:
-            # Try to parse as JSON
-            import re
-            if isinstance(init_result, str):
-                # Extract JSON from markdown code blocks if present
-                json_pattern = r'```json\\n(.*?)\\n```'
-                matches = re.findall(json_pattern, init_result, re.DOTALL)
-                if matches:
-                    result_dict = json.loads(matches[0])
+            # Convert Pydantic objects to dicts for JSON serialization
+            def pydantic_to_dict(obj):
+                """Convert Pydantic objects to dictionaries."""
+                if hasattr(obj, 'model_dump'):
+                    return obj.model_dump()
+                elif hasattr(obj, 'dict'):
+                    return obj.dict()
+                elif isinstance(obj, dict):
+                    return {k: pydantic_to_dict(v) for k, v in obj.items()}
+                elif isinstance(obj, list):
+                    return [pydantic_to_dict(item) for item in obj]
                 else:
-                    # Try direct JSON parse
-                    result_dict = json.loads(init_result)
-            else:
-                # Assume it's already a dict
-                result_dict = init_result
+                    return obj
 
+            # Convert result dict to JSON-serializable format
+            result_dict = {k: pydantic_to_dict(v) for k, v in init_result.items()}
+
+            # Extract novel_name (it's already at top level now)
             novel_name = result_dict.get('novel_name', '未命名小说')
             story_spec = result_dict.get('story_spec', {})
             story_bible = result_dict.get('story_bible', {})
             outline = result_dict.get('outline', {})
-
-            # Fallback: if novel_name is default, try to extract from raw_output
-            if novel_name == '未命名小说' and 'raw_output' in result_dict:
-                try:
-                    raw_data = json.loads(result_dict['raw_output'])
-                    if 'novel_name' in raw_data:
-                        novel_name = raw_data['novel_name']
-                        print(f"✓ Extracted novel_name from raw_output: {novel_name}")
-                    if 'story_spec' in raw_data and not story_spec:
-                        story_spec = raw_data['story_spec']
-                except (json.JSONDecodeError, TypeError) as e:
-                    print(f"⚠ Warning: Could not parse raw_output: {e}")
 
             # Sanitize novel name for directory (remove special characters)
             novel_name_sanitized = re.sub(r'[<>:"/\\|?*]', '', novel_name)
@@ -253,18 +245,10 @@ def run(
     for chapter_num in range(1, 10):
         logger.info(f"[Chapter {chapter_num}/9] Starting generation...")
         print(f"[Chapter {chapter_num}/9] Starting generation...")
-        # Fix B: Enhanced defensive code for outline handling
-        if isinstance(outline, dict):
-            outline_list = outline.get('outline', [])
-            # Handle raw_output case - extract outline from nested JSON
-            if not outline_list and 'raw_output' in outline:
-                try:
-                    inner_data = json.loads(outline['raw_output'])
-                    outline_list = inner_data.get('outline', [{}])
-                except (json.JSONDecodeError, TypeError):
-                    outline_list = [{}]
 
-            # Safely get chapter_outline with bounds checking
+        # Extract chapter outline from BookOutline
+        if isinstance(outline, dict) and 'chapters' in outline:
+            outline_list = outline.get('chapters', [])
             if outline_list and len(outline_list) >= chapter_num:
                 chapter_outline = outline_list[chapter_num - 1]
             else:
@@ -284,6 +268,12 @@ def run(
             updated_bible = result.get('updated_bible', current_bible)
             judge_report = result.get('judge_report', {})
             attempts = result.get('attempts', 1)
+
+            # Convert Pydantic objects to dicts if needed
+            if hasattr(updated_bible, 'model_dump'):
+                updated_bible = updated_bible.model_dump()
+            if hasattr(judge_report, 'model_dump'):
+                judge_report = judge_report.model_dump()
 
             # Validate chapter_text before saving
             if not chapter_text or (isinstance(chapter_text, str) and chapter_text.strip() == ''):
@@ -401,12 +391,41 @@ def run(
         final_report = final_result.get('final_report', {})
         success = final_result.get('success', False)
 
+        # Convert Pydantic objects to dicts if needed
+        if hasattr(final_book, 'model_dump'):
+            final_book = final_book.model_dump()
+        if hasattr(final_report, 'model_dump'):
+            final_report = final_report.model_dump()
+
+        # Extract actual text from FinalBook if it's a dict
+        if isinstance(final_book, dict) and 'chapters' in final_book:
+            # Reconstruct the book text from the structured format
+            if 'title' in final_book:
+                book_parts = [f"# {final_book['title']}"]
+            else:
+                book_parts = []
+
+            if 'introduction' in final_book:
+                book_parts.append(f"\n## 简介\n{final_book['introduction']}")
+
+            if 'table_of_contents' in final_book:
+                book_parts.append("\n## 目录\n" + "\n".join(final_book['table_of_contents']))
+
+            book_parts.append("\n## 正文\n")
+
+            for i, chapter_text in enumerate(final_book.get('chapters', []), 1):
+                book_parts.append(f"\n第{i}章\n{chapter_text}\n")
+
+            final_book_text = "\n".join(book_parts)
+        else:
+            final_book_text = str(final_book)
+
         # Save final book
         final_book_file = novel_dir / "complete_novel.md"
         with open(final_book_file, "w", encoding="utf-8") as f:
-            f.write(final_book)
+            f.write(final_book_text)
         logger.info(f"Saved complete novel to {final_book_file}")
-        logger.info(f"Final novel length: {len(final_book)} characters")
+        logger.info(f"Final novel length: {len(final_book_text)} characters")
         print(f"✓ Saved complete novel to {final_book_file}")
 
         # Save final report
@@ -428,7 +447,8 @@ def run(
         logger.error(f"Final assembly failed: {e}", exc_info=True)
         print(f"✗ Final assembly failed: {e}")
         print("  Saving intermediate results...")
-        final_book = complete_book
+        final_book_text = complete_book
+        final_report = {}
         success = False
 
     print()
@@ -462,7 +482,7 @@ def run(
 
     return {
         'success': success,
-        'final_book': final_book,
+        'final_book': final_book_text,
         'metadata': generation_metadata,
         'novel_name': novel_name,
         'novel_dir': str(novel_dir.absolute())

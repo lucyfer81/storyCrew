@@ -1,20 +1,27 @@
 """Story specification models."""
+from __future__ import annotations
 from typing import List, Optional, Literal
 from pydantic import BaseModel, Field
 
 
+class StorySpecWithResult(BaseModel):
+    """Wrapper for build_story_spec task output."""
+    novel_name: str
+    story_spec: StorySpec
+
+
 class NarrationConfig(BaseModel):
     """Narration configuration."""
-    pov: Literal["first_person", "third_person"] = "third_person"
-    tense: str = "past_or_present_consistent"
+    pov: Literal["first_person", "third_person", "third_limited", "third_omniscient"] = "third_person"
+    tense: Literal["past", "present", "past_or_present_consistent"] = "past_or_present_consistent"
 
 
 class StyleGuide(BaseModel):
     """Writing style guide."""
     language: str = "zh"
     tone: List[str] = Field(default_factory=lambda: ["现实", "细腻", "有张力"])
-    pacing: str = "balanced"
-    imagery_density: str = "moderate"
+    pacing: Literal["slow", "balanced", "fast", "variable"] = "balanced"
+    imagery_density: Literal["sparse", "moderate", "rich", "dense"] = "moderate"
     dialogue_ratio: float = Field(default=0.3, ge=0.0, le=1.0)
     forbidden_words: List[str] = Field(default_factory=list)
     style_notes: List[str] = Field(default_factory=list)
@@ -25,7 +32,7 @@ class StorySpec(BaseModel):
     # Basic metadata
     language: str = "zh"
     genre: Literal["romance", "mystery"] = "romance"
-    subgenre: str = "urban_workplace"  # or "traditional", "social"
+    subgenre: Literal["urban_workplace", "traditional", "social", "police_procedural", "cozy"] = "urban_workplace"
 
     # Structure
     total_chapters: int = 9
