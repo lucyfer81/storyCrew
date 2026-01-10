@@ -354,6 +354,57 @@ update_bible:
     - 判断是否为red_herring（误导）
     - 更新clues.planted, clues.resolved, clues.open
 
+    ⚠️ 重要：对象字段要求（严格遵守）
+    ============================================================
+    1️⃣ Clue对象必须包含的字段：
+       - clue_id: 字符串，线索唯一标识（如 "clue_001", "weapon_knife"）
+       - description: 字符串，线索描述
+       - chapter_introduced: 整数，引入章节号
+       - is_red_herring: 布尔值，是否为误导线索
+       - resolved: 布尔值，是否已解决
+       - resolution_chapter: 整数或null，解决章节号
+       - importance: 字符串，"major" 或 "minor"
+
+    2️⃣ TimelineEvent对象必须包含的字段：
+       - chapter: 整数，章节号（不能是字符串）
+       - scene: 整数或null，场景号（不能是字符串）
+       - event: 字符串，事件描述（必需字段）
+       - characters_involved: 字符串数组，涉及的人物
+       - facts_established: 字符串数组，建立的事实
+       - emotional_shift: 字符串或null，情绪变化
+
+    🚫 绝对禁止：
+    - ❌ Clue对象缺少clue_id或description字段
+    - ❌ TimelineEvent.scene使用字符串（如"plants7"），必须是整数
+    - ❌ TimelineEvent缺少event字段
+
+    正确示例：
+    {
+      "clues": {
+        "planted": [
+          {
+            "clue_id": "clue_001",        ← 必需，字符串
+            "description": "发现血迹",    ← 必需，字符串
+            "chapter_introduced": 3,      ← 整数
+            "is_red_herring": false,
+            "resolved": false,
+            "resolution_chapter": null,
+            "importance": "major"
+          }
+        ]
+      },
+      "timeline": [
+        {
+          "chapter": 3,           ← 整数，不是字符串
+          "scene": 2,             ← 整数或null，不是字符串
+          "event": "主角发现密室", ← 必需字段
+          "characters_involved": ["主角"],
+          "facts_established": ["密室存在"],
+          "emotional_shift": "震惊"
+        }
+      ]
+    }
+
     返回更新后的完整StoryBible。
   expected_output: >
     严格JSON格式的更新后的StoryBible对象。
@@ -482,6 +533,39 @@ judge_whole_book:
     - ending_satisfaction >= 8
     - 无连续性矛盾
 
+    ⚠️ 重要：字段类型区分（严格遵守）
+    ============================================================
+    1️⃣ 评分字段（直接填写数值）：
+       - plant_payoff_coverage: 浮点数（0.0-1.0）
+       - theme_delivery: 整数（0-10）
+       - ending_satisfaction: 整数（0-10）
+
+    2️⃣ issues数组中的type字段（只能是以下9种之一）：
+       "continuity" - 连续性问题
+       "structure" - 结构问题
+       "motivation" - 人物动机问题
+       "pacing" - 节奏问题
+       "clue_fairness" - 线索公平性问题（悬疑）
+       "prose" - 文笔问题
+       "hook" - 钩子问题
+       "safety" - 安全合规问题
+       "word_count" - 字数问题
+
+    🚫 绝对禁止：
+    - ❌ 不要把评分字段名用作issue的type值
+    - ❌ issues.type不能是："ending_satisfaction", "plant_payoff_coverage", "theme_delivery"
+    - ✅ 这些字段应该直接在JSON根级别填写数值，不是在issues数组中
+
+    正确示例：
+    {
+      "plant_payoff_coverage": 0.95,  ← 直接填数值
+      "theme_delivery": 8,             ← 直接填数值
+      "ending_satisfaction": 8,         ← 直接填数值
+      "issues": [
+        {"type": "pacing", "severity": "medium", "note": "节奏稍慢"}  ← type只能是上面9种
+      ]
+    }
+
     如果不通过，提供targeted_patch_instructions。
   expected_output: >
     严格JSON格式：
@@ -490,12 +574,31 @@ judge_whole_book:
       "plant_payoff_coverage": 0.95,
       "theme_delivery": 8,
       "ending_satisfaction": 8,
-      "scores": {...},
-      "hard_fail": {...},
+      "scores": {
+        "continuity": 0-10,
+        "pacing": 0-10,
+        "character_motivation": 0-10,
+        "genre_fulfillment": 0-10,
+        "prose": 0-10,
+        "hook": 0-10,
+        "clue_fairness": 0-10 (悬疑)
+      },
+      "hard_fail": {
+        "safety_pass": true/false,
+        "continuity_conflicts": [],
+        "word_count_in_range": true/false
+      },
       "passed": true/false,
-      "issues": [...],
-      "revision_instructions": [...],
-      "strengths": [...]
+      "issues": [
+        {
+          "type": "continuity/structure/motivation/pacing/clue_fairness/prose/hook/safety/word_count",
+          "severity": "low/medium/high/critical",
+          "note": "问题描述",
+          "location": "章节引用（可选）"
+        }
+      ],
+      "revision_instructions": ["修订指令1", "修订指令2"],
+      "strengths": ["优点1", "优点2"]
     }
 
     不要包含JSON之外的文字。
