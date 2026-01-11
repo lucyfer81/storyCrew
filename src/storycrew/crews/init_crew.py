@@ -1,7 +1,7 @@
 """Initialization Crew for story generation setup."""
 from crewai import Crew, Process, Agent, Task
 from storycrew.crew import Storycrew, repair_json
-from storycrew.models import StorySpecWithResult, Concept
+from storycrew.models import StorySpecWithResult, Concept, StoryBible
 from typing import Dict, Any
 import logging
 import json
@@ -48,6 +48,83 @@ def sanitize_concept_json(json_str: str) -> str:
 
     return json.dumps(data, ensure_ascii=False)
 
+
+def _ensure_clue_fields(json_str: str) -> str:
+    """
+    Ensure all Clue objects have required fields.
+
+    Fixes missing 'description' field in Clue objects by adding
+    a meaningful placeholder that includes the clue_id.
+
+    Args:
+        json_str: JSON string potentially containing incomplete Clue objects
+
+    Returns:
+        JSON string with all Clue objects having required fields
+    """
+    try:
+        data = json.loads(json_str)
+    except (json.JSONDecodeError, TypeError):
+        return json_str  # If not valid JSON, return as-is
+
+    # Fix clues.planted, clues.resolved, clues.open
+    if 'clues' in data and isinstance(data['clues'], dict):
+        for clue_list_key in ['planted', 'resolved', 'open']:
+            if clue_list_key in data['clues'] and isinstance(data['clues'][clue_list_key], list):
+                for clue in data['clues'][clue_list_key]:
+                    if isinstance(clue, dict):
+                        # Ensure description field exists
+                        if 'description' not in clue or not clue['description']:
+                            clue_id = clue.get('clue_id', 'unknown')
+                            clue['description'] = f"[线索 {clue_id}: 详细描述待补充]"
+                            logger.info(f"[CLUE REPAIR] Added missing description for clue {clue_id}")
+
+    return json.dumps(data, ensure_ascii=False)
+
+
+def _ensure_timeline_event_fields(json_str: str) -> str:
+    """
+    Ensure all TimelineEvent objects have required fields.
+
+    Fixes missing 'event' field and ensures 'scene' is an integer, not a string.
+
+    Args:
+        json_str: JSON string potentially containing incomplete TimelineEvent objects
+
+    Returns:
+        JSON string with all TimelineEvent objects having required fields
+    """
+    try:
+        data = json.loads(json_str)
+    except (json.JSONDecodeError, TypeError):
+        return json_str  # If not valid JSON, return as-is
+
+    # Fix timeline events
+    if 'timeline' in data and isinstance(data['timeline'], list):
+        for i, event in enumerate(data['timeline']):
+            if isinstance(event, dict):
+                # Ensure event field exists
+                if 'event' not in event or not event['event']:
+                    chapter = event.get('chapter', '?')
+                    event['event'] = f"[第{chapter}章事件描述待补充]"
+                    logger.info(f"[TIMELINE REPAIR] Added missing event for timeline[{i}]")
+
+                # Ensure scene is an integer, not a string
+                if 'scene' in event and isinstance(event['scene'], str):
+                    # Try to extract number from string like "plants7" -> 7
+                    import re
+                    match = re.search(r'\d+', event['scene'])
+                    if match:
+                        event['scene'] = int(match.group())
+                        logger.info(f"[TIMELINE REPAIR] Converted scene from string to int: timeline[{i}]")
+                    else:
+                        # If no number found, set to None
+                        event['scene'] = None
+                        logger.info(f"[TIMELINE REPAIR] Set scene to None for timeline[{i}] (could not parse number)")
+
+    return json.dumps(data, ensure_ascii=False)
+
+
 # Monkey-patch CrewAI's converter to apply JSON repairs
 import crewai.utilities.converter as converter_module
 _original_handle_partial_json = converter_module.handle_partial_json
@@ -66,7 +143,7 @@ def _patched_handle_partial_json(result: str, model: type, is_json_output: bool 
     Returns:
         Validated Pydantic model instance
     """
-    # Apply Concept-specific sanitization for nested list bug
+    # Apply model-specific sanitization before parsing
     working_result = result
     if model == Concept:
         working_result = sanitize_concept_json(str(result))
@@ -81,19 +158,40 @@ def _patched_handle_partial_json(result: str, model: type, is_json_output: bool 
         logger.info(f"[JSON REPAIR] Parse failed, attempting repair. Error: {str(e)[:100]}")
         logger.info(f"[JSON REPAIR] Original output (first 200 chars): {str(working_result)[:200]}")
 
-        # Apply repairs
+        # Step 1: Apply JSON syntax repairs (missing quotes, trailing commas, etc.)
         repaired = repair_json(str(working_result))
+
+        # Step 2: Apply model-specific field completion
+        if repaired != str(working_result):
+            logger.info(f"[JSON REPAIR] Applied syntax repairs (first 200 chars): {repaired[:200]}")
 
         # For Concept model, apply sanitization again after repair
         if model == Concept:
             repaired = sanitize_concept_json(repaired)
 
-        if repaired != str(working_result):
-            logger.info(f"[JSON REPAIR] Repaired output (first 200 chars): {repaired[:200]}")
-            # Retry with repaired JSON
+        # For StoryBible model, apply field completion for missing required fields
+        if model == StoryBible:
+            logger.info("[STORYBIBLE REPAIR] Applying field completion for StoryBible")
+
+            # Fix Clue objects (missing description)
+            repaired_after_clues = _ensure_clue_fields(repaired)
+            if repaired_after_clues != repaired:
+                logger.info("[STORYBIBLE REPAIR] Fixed missing Clue.description fields")
+                repaired = repaired_after_clues
+
+            # Fix TimelineEvent objects (missing event, wrong scene type)
+            repaired_after_timeline = _ensure_timeline_event_fields(repaired)
+            if repaired_after_timeline != repaired:
+                logger.info("[STORYBIBLE REPAIR] Fixed TimelineEvent field issues")
+                repaired = repaired_after_timeline
+
+        # Step 3: Retry parsing with repaired JSON
+        try:
             return _original_handle_partial_json(repaired, model, is_json_output, agent, converter_cls)
-        else:
-            logger.info("[JSON REPAIR] No repairs applied, re-raising original error")
+        except Exception as e2:
+            # If still failing after all repairs, log and re-raise
+            logger.info(f"[JSON REPAIR] Parse failed even after repairs. Error: {str(e2)[:100]}")
+            logger.info("[JSON REPAIR] Re-raising original error")
             raise
 
 # Apply the monkey-patch
