@@ -125,6 +125,49 @@ def _ensure_timeline_event_fields(json_str: str) -> str:
     return json.dumps(data, ensure_ascii=False)
 
 
+def _ensure_character_fields(json_str: str) -> str:
+    """
+    Ensure all Character objects have valid field types.
+
+    Fixes corrupted integer fields (age) that may contain strings.
+    This addresses the issue where LLM outputs 'theme_statement' instead of an integer age.
+
+    Args:
+        json_str: JSON string potentially containing corrupted Character objects
+
+    Returns:
+        JSON string with all Character objects having valid field types
+    """
+    try:
+        data = json.loads(json_str)
+    except (json.JSONDecodeError, TypeError):
+        return json_str  # If not valid JSON, return as-is
+
+    # Fix characters list
+    if 'characters' in data and isinstance(data['characters'], list):
+        for i, char in enumerate(data['characters']):
+            if isinstance(char, dict):
+                # Fix age field - must be integer
+                if 'age' in char and not isinstance(char['age'], (int, type(None))):
+                    age_value = char['age']
+                    if isinstance(age_value, str):
+                        # Try to extract number from string
+                        match = re.search(r'\d+', age_value)
+                        if match:
+                            char['age'] = int(match.group())
+                            logger.info(f"[CHARACTER REPAIR] Converted age from string to int: characters[{i}].age = {char['age']}")
+                        else:
+                            # If no number found, set to None
+                            char['age'] = None
+                            logger.info(f"[CHARACTER REPAIR] Set age to None for characters[{i}] (could not parse number from '{age_value}')")
+                    else:
+                        # Non-string, non-integer value
+                        char['age'] = None
+                        logger.info(f"[CHARACTER REPAIR] Set age to None for characters[{i}] (invalid type: {type(age_value).__name__}, value: {age_value})")
+
+    return json.dumps(data, ensure_ascii=False)
+
+
 # Monkey-patch CrewAI's converter to apply JSON repairs
 import crewai.utilities.converter as converter_module
 _original_handle_partial_json = converter_module.handle_partial_json
@@ -184,6 +227,12 @@ def _patched_handle_partial_json(result: str, model: type, is_json_output: bool 
             if repaired_after_timeline != repaired:
                 logger.info("[STORYBIBLE REPAIR] Fixed TimelineEvent field issues")
                 repaired = repaired_after_timeline
+
+            # Fix Character objects (corrupted age field type)
+            repaired_after_characters = _ensure_character_fields(repaired)
+            if repaired_after_characters != repaired:
+                logger.info("[STORYBIBLE REPAIR] Fixed Character field issues")
+                repaired = repaired_after_characters
 
         # Step 3: Retry parsing with repaired JSON
         try:

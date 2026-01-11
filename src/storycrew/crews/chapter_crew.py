@@ -1,7 +1,10 @@
 """Chapter Generation Crew for writing individual chapters."""
+import logging
 from crewai import Crew, Process, Task
 from storycrew.crew import Storycrew
 from typing import Dict, Any, Optional
+
+logger = logging.getLogger("StoryCrew")
 
 
 class ChapterCrew:
@@ -87,30 +90,48 @@ class ChapterCrew:
             verbose=True
         )
 
-        # Execute with retry logic
+        # Execute with retry logic for both quality gates AND exceptions
         for attempt in range(self.max_retries + 1):
-            result = chapter_crew.kickoff(inputs=inputs)
+            try:
+                result = chapter_crew.kickoff(inputs=inputs)
 
-            # Direct access to Pydantic objects
-            scene_list = result.tasks_output[0].pydantic  # SceneList
-            draft = result.tasks_output[1].pydantic  # ChapterDraft
-            updated_bible = result.tasks_output[2].pydantic  # StoryBible
-            revision = result.tasks_output[3].pydantic  # ChapterRevision
-            judge = result.tasks_output[4].pydantic  # JudgeReport
+                # Direct access to Pydantic objects
+                scene_list = result.tasks_output[0].pydantic  # SceneList
+                draft = result.tasks_output[1].pydantic  # ChapterDraft
+                updated_bible = result.tasks_output[2].pydantic  # StoryBible
+                revision = result.tasks_output[3].pydantic  # ChapterRevision
+                judge = result.tasks_output[4].pydantic  # JudgeReport
 
-            # Check if passed quality gate
-            if judge.passed:
-                return {
-                    'chapter_text': revision.revised_text,
-                    'updated_bible': updated_bible,
-                    'judge_report': judge,
-                    'attempts': attempt + 1
-                }
+                # Check if passed quality gate
+                if judge.passed:
+                    return {
+                        'chapter_text': revision.revised_text,
+                        'updated_bible': updated_bible,
+                        'judge_report': judge,
+                        'attempts': attempt + 1
+                    }
 
-            # Failed - prepare for retry
-            if attempt < self.max_retries:
-                # Update revision instructions for next attempt
-                inputs["revision_instructions"] = "\n".join(judge.revision_instructions)
+                # Failed quality gate - prepare for retry
+                if attempt < self.max_retries:
+                    # Update revision instructions for next attempt
+                    inputs["revision_instructions"] = "\n".join(judge.revision_instructions)
+
+            except Exception as e:
+                # Exception during generation (timeout, validation error, etc.)
+                error_type = type(e).__name__
+                error_msg = str(e)
+
+                # If this is the last attempt or a critical error, re-raise to main.py
+                if attempt >= self.max_retries:
+                    logger.error(f"Chapter {chapter_number} failed after {attempt + 1} attempts: {error_type}: {error_msg[:100]}")
+                    raise
+
+                # Log and retry
+                logger.warning(f"Chapter {chapter_number} attempt {attempt + 1} failed with {error_type}: {error_msg[:100]}, retrying...")
+                # Clear revision instructions for clean retry
+                inputs["revision_instructions"] = ""
+                # Continue to next iteration of retry loop
+                continue
 
         # All retries exhausted
         return {
