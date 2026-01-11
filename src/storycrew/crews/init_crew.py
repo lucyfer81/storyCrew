@@ -127,43 +127,72 @@ def _ensure_timeline_event_fields(json_str: str) -> str:
 
 def _ensure_character_fields(json_str: str) -> str:
     """
-    Ensure all Character objects have valid field types.
+    Ensure all Character objects have valid field types and correct structure.
 
-    Fixes corrupted integer fields (age) that may contain strings.
-    This addresses the issue where LLM outputs 'theme_statement' instead of an integer age.
+    Fixes two types of issues:
+    1. Corrupted integer fields (age) that may contain strings
+    2. Wrong object types in characters array (e.g., TimelineEvent objects mixed in)
+
+    This addresses the issue where LLM accidentally mixes timeline data into characters array,
+    causing validation errors like "characters.3.name Field required".
 
     Args:
         json_str: JSON string potentially containing corrupted Character objects
 
     Returns:
-        JSON string with all Character objects having valid field types
+        JSON string with all Character objects having valid field types and correct structure
     """
+    import re
     try:
         data = json.loads(json_str)
     except (json.JSONDecodeError, TypeError):
         return json_str  # If not valid JSON, return as-is
 
-    # Fix characters list
+    # Fix characters list - filter out invalid objects and fix valid ones
     if 'characters' in data and isinstance(data['characters'], list):
+        clean_characters = []
         for i, char in enumerate(data['characters']):
-            if isinstance(char, dict):
-                # Fix age field - must be integer
-                if 'age' in char and not isinstance(char['age'], (int, type(None))):
-                    age_value = char['age']
-                    if isinstance(age_value, str):
-                        # Try to extract number from string
-                        match = re.search(r'\d+', age_value)
-                        if match:
-                            char['age'] = int(match.group())
-                            logger.info(f"[CHARACTER REPAIR] Converted age from string to int: characters[{i}].age = {char['age']}")
-                        else:
-                            # If no number found, set to None
-                            char['age'] = None
-                            logger.info(f"[CHARACTER REPAIR] Set age to None for characters[{i}] (could not parse number from '{age_value}')")
+            if not isinstance(char, dict):
+                logger.warning(f"[CHARACTER REPAIR] Skipping non-dict object at characters[{i}]: {type(char).__name__}")
+                continue
+
+            # Check if this is a valid Character object (must have name and role)
+            has_name = 'name' in char and char['name']
+            has_role = 'role' in char and char['role']
+
+            # Detect TimelineEvent objects mixed into characters array
+            if not has_name and not has_role:
+                if 'chapter' in char and 'scene' in char:
+                    # This is a TimelineEvent, not a Character - remove it
+                    logger.warning(f"[CHARACTER REPAIR] Found TimelineEvent in characters[{i}] (chapter={char.get('chapter')}, scene={char.get('scene')}), removing")
+                    continue
+                else:
+                    # Unknown object type - add default values to make it valid
+                    logger.warning(f"[CHARACTER REPAIR] Found invalid object in characters[{i}], adding default name/role")
+                    char['name'] = f"Unknown Character {i}"
+                    char['role'] = "supporting"
+
+            # Fix age field - must be integer
+            if 'age' in char and not isinstance(char['age'], (int, type(None))):
+                age_value = char['age']
+                if isinstance(age_value, str):
+                    # Try to extract number from string
+                    match = re.search(r'\d+', age_value)
+                    if match:
+                        char['age'] = int(match.group())
+                        logger.info(f"[CHARACTER REPAIR] Converted age from string to int: characters[{i}].age = {char['age']}")
                     else:
-                        # Non-string, non-integer value
+                        # If no number found, set to None
                         char['age'] = None
-                        logger.info(f"[CHARACTER REPAIR] Set age to None for characters[{i}] (invalid type: {type(age_value).__name__}, value: {age_value})")
+                        logger.info(f"[CHARACTER REPAIR] Set age to None for characters[{i}] (could not parse number from '{age_value}')")
+                else:
+                    # Non-string, non-integer value
+                    char['age'] = None
+                    logger.info(f"[CHARACTER REPAIR] Set age to None for characters[{i}] (invalid type: {type(age_value).__name__}, value: {age_value})")
+
+            clean_characters.append(char)
+
+        data['characters'] = clean_characters
 
     return json.dumps(data, ensure_ascii=False)
 
