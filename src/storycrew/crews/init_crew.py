@@ -79,6 +79,25 @@ def _ensure_clue_fields(json_str: str) -> str:
                             clue['description'] = f"[线索 {clue_id}: 详细描述待补充]"
                             logger.info(f"[CLUE REPAIR] Added missing description for clue {clue_id}")
 
+                        # Ensure chapter_introduced is an integer
+                        if 'chapter_introduced' in clue and not isinstance(clue['chapter_introduced'], int):
+                            original_value = clue['chapter_introduced']
+                            if isinstance(original_value, str):
+                                # Try to extract number from string (e.g., "第5章" -> 5)
+                                import re
+                                match = re.search(r'\d+', str(original_value))
+                                if match:
+                                    clue['chapter_introduced'] = int(match.group())
+                                    logger.info(f"[CLUE REPAIR] Converted chapter_introduced from string to int: '{original_value}' -> {clue['chapter_introduced']}")
+                                else:
+                                    # If no number found, set to 1 as default
+                                    clue['chapter_introduced'] = 1
+                                    logger.info(f"[CLUE REPAIR] Set chapter_introduced to 1 (could not parse number from '{original_value}')")
+                            else:
+                                # Non-string, non-integer value - set to 1
+                                clue['chapter_introduced'] = 1
+                                logger.info(f"[CLUE REPAIR] Set chapter_introduced to 1 (invalid type: {type(original_value).__name__})")
+
     return json.dumps(data, ensure_ascii=False)
 
 
@@ -167,10 +186,18 @@ def _ensure_character_fields(json_str: str) -> str:
                     logger.warning(f"[CHARACTER REPAIR] Found TimelineEvent in characters[{i}] (chapter={char.get('chapter')}, scene={char.get('scene')}), removing")
                     continue
                 else:
-                    # Unknown object type - add default values to make it valid
-                    logger.warning(f"[CHARACTER REPAIR] Found invalid object in characters[{i}], adding default name/role")
-                    char['name'] = f"Unknown Character {i}"
-                    char['role'] = "supporting"
+                    # Check if this is a completely corrupted/empty object
+                    char_str = str(char).strip()
+                    # Remove objects that are empty, only whitespace, or minimal corruption
+                    if len(char_str) <= 10 or char_str in ['{}', '{', '', ' ', '\t', '\n', '\r', '\r\n']:
+                        # Completely corrupted object - remove it
+                        logger.warning(f"[CHARACTER REPAIR] Found corrupted/empty object in characters[{i}]: '{char_str[:20]}', removing")
+                        continue
+                    else:
+                        # Unknown object type - add default values to make it valid
+                        logger.warning(f"[CHARACTER REPAIR] Found invalid object in characters[{i}], adding default name/role")
+                        char['name'] = f"Unknown Character {len(clean_characters)}"
+                        char['role'] = "supporting"
 
             # Fix age field - must be integer
             if 'age' in char and not isinstance(char['age'], (int, type(None))):
