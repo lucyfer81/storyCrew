@@ -590,6 +590,44 @@ judge_whole_book:
     不要包含JSON之外的文字。
   agent: critic_judge
 
+generate_novel_metadata:
+  description: >
+    根据小说内容生成书名、简介和目录。
+
+    StorySpec: {story_spec}
+    StoryBible: {story_bible}
+    章节标题列表：{chapter_titles}
+
+    你需要生成：
+    1. 书名：根据小说主题和内容创作一个吸引人的书名（2-8个字）
+    2. 简介：80-150字的简介，吸引读者但不剧透结局
+    3. 目录：格式化的章节标题列表
+
+    注意：
+    - 书名要有文学性和吸引力
+    - 简介要简洁有力，突出核心冲突
+    - 目录使用"第X章：标题"的格式
+  expected_output: >
+    严格JSON格式（不要包含JSON之外的文字）：
+    {
+      "title": "书名",
+      "introduction": "简介内容（80-150字）",
+      "table_of_contents": [
+        "第1章：章节标题",
+        "第2章：章节标题",
+        "第3章：章节标题",
+        "第4章：章节标题",
+        "第5章：章节标题",
+        "第6章：章节标题",
+        "第7章：章节标题",
+        "第8章：章节标题",
+        "第9章：章节标题"
+      ]
+    }
+
+    不要包含JSON之外的文字。
+  agent: line_editor
+
 assemble_book:
   description: >
     将9章正文组装成最终小说，添加标题、简介、目录。

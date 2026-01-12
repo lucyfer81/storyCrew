@@ -63,12 +63,12 @@ class FinalCrew:
         # Execute
         result = final_crew.kickoff(inputs=inputs)
 
-        # Direct access to Pydantic objects
-        final_report = result.tasks_output[0].pydantic  # JudgeReport
-        final_book = result.tasks_output[1].pydantic  # FinalBook
+        # Access outputs
+        final_report = result.tasks_output[0].pydantic  # JudgeReport (structured)
+        final_book_text = result.tasks_output[1].raw  # Final book (plain Markdown text)
 
         return {
-            'final_book': final_book,
+            'final_book': final_book_text,  # Changed: now returns plain text
             'final_report': final_report,
             'success': final_report.passed
         }

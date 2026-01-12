@@ -5,7 +5,7 @@ from .scene_list import SceneList, Scene
 from .judge_report import JudgeReport, ScoreBreakdown, Issue
 from .concept import Concept, WorkplaceEcosystem, SuspectPool
 from .chapter import ChapterDraft, ChapterRevision, ChapterOutput
-from .book import BookOutline, FinalBook, TruthCard
+from .book import BookOutline, NovelMetadata, FinalBook, TruthCard
 
 __all__ = [
     "StorySpec",
@@ -32,6 +32,7 @@ __all__ = [
     "ChapterRevision",
     "ChapterOutput",
     "BookOutline",
+    "NovelMetadata",
     "FinalBook",
     "TruthCard",
 ]

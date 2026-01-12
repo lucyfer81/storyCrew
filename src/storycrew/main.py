@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 from storycrew.crews import InitCrew, ChapterCrew, FinalCrew
+from crewai import Process
 
 warnings.filterwarnings("ignore", category=SyntaxWarning, module="pysbd")
 
@@ -367,89 +368,200 @@ def run(
 
     # ==================== PHASE 3: FINAL ASSEMBLY ====================
     logger.info("=" * 80)
-    logger.info("[Phase 3] Final Assembly - Review and assemble complete novel")
+    logger.info("[Phase 3] Final Assembly - Generate metadata and assemble novel")
     logger.info("=" * 80)
 
-    print("[Phase 3] Final Assembly - Review and assemble complete novel")
+    print("[Phase 3] Final Assembly - Generate metadata and assemble novel")
     print("-" * 80)
 
-    # Combine all chapters
-    complete_book = "\\n\\n".join(chapters)
-    logger.info(f"Combined {len(chapters)} chapters for final assembly")
-
-    final_crew = FinalCrew()
+    # Step 1: Generate metadata using LLM (title, introduction, TOC)
+    logger.info("Step 1: Generating novel metadata (title, introduction, TOC)...")
+    print("Step 1: Generating novel metadata...")
 
     try:
-        logger.info("Starting FinalCrew.finalize_book()...")
+        from storycrew.crew import Storycrew
+        base_crew = Storycrew()
+
+        # Extract chapter titles for metadata generation
+        chapter_titles = []
+        for i in range(1, 10):
+            chapter_file = novel_dir / f"chapter_{i:02d}.md"
+            if chapter_file.exists():
+                with open(chapter_file, 'r', encoding='utf-8') as f:
+                    first_line = f.readline().strip()
+                    if first_line:
+                        chapter_titles.append(first_line)
+                    else:
+                        chapter_titles.append(f"第{i}章")
+            else:
+                chapter_titles.append(f"第{i}章")
+
+        # Create metadata generation task
+        metadata_task = base_crew.generate_novel_metadata()
+        metadata_task.agent = base_crew.line_editor()
+
+        # Prepare inputs
+        metadata_inputs = {
+            "story_spec": story_spec.model_dump() if hasattr(story_spec, 'model_dump') else story_spec,
+            "story_bible": current_bible.model_dump() if hasattr(current_bible, 'model_dump') else current_bible,
+            "chapter_titles": chapter_titles
+        }
+
+        # Execute metadata generation
+        from crewai import Crew
+        metadata_crew = Crew(
+            agents=[base_crew.line_editor()],
+            tasks=[metadata_task],
+            process=Process.sequential,
+            verbose=True
+        )
+
+        metadata_result = metadata_crew.kickoff(inputs=metadata_inputs)
+        metadata = metadata_result.pydantic  # NovelMetadata object
+
+        logger.info(f"Generated metadata:")
+        logger.info(f"  Title: {metadata.title}")
+        logger.info(f"  Introduction: {metadata.introduction[:100]}...")
+        logger.info(f"  TOC: {len(metadata.table_of_contents)} chapters")
+        print(f"  ✓ Title: {metadata.title}")
+        print(f"  ✓ Introduction: {metadata.introduction[:100]}...")
+        print(f"  ✓ TOC: {len(metadata.table_of_contents)} chapters")
+        print()
+
+    except Exception as e:
+        logger.warning(f"Metadata generation failed: {e}, using fallback")
+        print(f"⚠ Metadata generation failed: {e}, using fallback")
+        # Fallback metadata
+        metadata = type('Metadata', (), {
+            'title': novel_name,
+            'introduction': f"《{novel_name}》是一部九章节的小说。",
+            'table_of_contents': chapter_titles
+        })()
+        print()
+
+    # Step 2: Assemble complete novel using Python (deterministic, fast, complete)
+    logger.info("Step 2: Assembling complete novel...")
+    print("Step 2: Assembling complete novel...")
+
+    # Read all chapters
+    chapter_contents = []
+    for i in range(1, 10):
+        chapter_file = novel_dir / f"chapter_{i:02d}.md"
+        if chapter_file.exists():
+            with open(chapter_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+                chapter_contents.append(content)
+                logger.info(f"  Read chapter {i}: {len(content)} characters")
+        else:
+            logger.error(f"  Chapter {i} not found!")
+
+    logger.info(f"Read {len(chapter_contents)} chapters total")
+    print(f"  ✓ Read {len(chapter_contents)} chapters")
+
+    # Assemble the novel (deterministic string concatenation)
+    novel_parts = []
+
+    # Title
+    novel_parts.append(f"# {metadata.title}\n")
+
+    # Introduction
+    novel_parts.append(f"## 简介\n{metadata.introduction}\n")
+
+    # Table of Contents
+    novel_parts.append("## 目录\n")
+    for toc_entry in metadata.table_of_contents:
+        novel_parts.append(toc_entry)
+    novel_parts.append("")  # Empty line after TOC
+
+    # Main content
+    novel_parts.append("## 正文\n")
+    for i, chapter_content in enumerate(chapter_contents, 1):
+        novel_parts.append(chapter_content)
+        if i < len(chapter_contents):
+            novel_parts.append("\n\n")  # Separator between chapters
+
+    # Ending marker
+    novel_parts.append("\n[全书完]")
+
+    final_book_text = "\n".join(novel_parts)
+
+    logger.info(f"Assembled novel: {len(final_book_text)} characters")
+    print(f"  ✓ Assembled {len(final_book_text)} characters")
+    print()
+
+    # Step 3: Quality review using LLM (optional but recommended)
+    logger.info("Step 3: Running quality review...")
+    print("Step 3: Running quality review...")
+
+    try:
+        # Combine chapters for review
+        complete_book = "\n\n".join(chapters)
+
+        final_crew = FinalCrew()
         final_result = final_crew.finalize_book(
             book_text=complete_book,
             story_bible=current_bible,
             story_spec=story_spec
         )
 
-        final_book = final_result.get('final_book', complete_book)
         final_report = final_result.get('final_report', {})
         success = final_result.get('success', False)
 
-        # Convert Pydantic objects to dicts if needed
-        if hasattr(final_book, 'model_dump'):
-            final_book = final_book.model_dump()
+        # Convert Pydantic report to dict if needed
         if hasattr(final_report, 'model_dump'):
             final_report = final_report.model_dump()
 
-        # Extract actual text from FinalBook if it's a dict
-        if isinstance(final_book, dict) and 'chapters' in final_book:
-            # Reconstruct the book text from the structured format
-            if 'title' in final_book:
-                book_parts = [f"# {final_book['title']}"]
-            else:
-                book_parts = []
-
-            if 'introduction' in final_book:
-                book_parts.append(f"\n## 简介\n{final_book['introduction']}")
-
-            if 'table_of_contents' in final_book:
-                book_parts.append("\n## 目录\n" + "\n".join(final_book['table_of_contents']))
-
-            book_parts.append("\n## 正文\n")
-
-            for i, chapter_text in enumerate(final_book.get('chapters', []), 1):
-                book_parts.append(f"\n第{i}章\n{chapter_text}\n")
-
-            final_book_text = "\n".join(book_parts)
-        else:
-            final_book_text = str(final_book)
-
-        # Save final book
-        final_book_file = novel_dir / "complete_novel.md"
-        with open(final_book_file, "w", encoding="utf-8") as f:
-            f.write(final_book_text)
-        logger.info(f"Saved complete novel to {final_book_file}")
-        logger.info(f"Final novel length: {len(final_book_text)} characters")
-        print(f"✓ Saved complete novel to {final_book_file}")
-
-        # Save final report
-        with open(novel_dir / "final_report.json", "w", encoding="utf-8") as f:
-            json.dump(final_report, f, ensure_ascii=False, indent=2)
-        logger.info(f"Saved final report to {novel_dir / 'final_report.json'}")
-        print(f"✓ Saved final report to {novel_dir / 'final_report.json'}")
-
-        if success:
-            logger.info("✓✓✓ Novel generation complete and passed quality gates! ✓✓✓")
-            print("\\n✓✓✓ Novel generation complete and passed quality gates! ✓✓✓")
-        else:
-            logger.warning("Novel generation complete but did not pass all quality gates")
-            logger.warning(f"Issues: {[issue.get('note') for issue in final_report.get('issues', [])]}")
-            print("\\n⚠ Novel generation complete but did not pass all quality gates")
-            print(f"  Issues: {[issue.get('note') for issue in final_report.get('issues', [])]}")
+        logger.info(f"Quality review completed. Passed: {success}")
+        print(f"  ✓ Quality review completed. Passed: {success}")
+        print()
 
     except Exception as e:
-        logger.error(f"Final assembly failed: {e}", exc_info=True)
-        print(f"✗ Final assembly failed: {e}")
-        print("  Saving intermediate results...")
-        final_book_text = complete_book
+        logger.warning(f"Quality review failed: {e}")
+        print(f"⚠ Quality review failed: {e}")
         final_report = {}
         success = False
+        print()
+
+    # Save final book with title-based filename
+    # Sanitize title for filename (remove special characters)
+    safe_title = "".join(c for c in metadata.title if c.isalnum() or c in (' ', '-', '_'))
+    safe_title = safe_title.replace(' ', '_')
+    final_book_file = novel_dir / f"{safe_title}_final.md"
+
+    with open(final_book_file, "w", encoding="utf-8") as f:
+        f.write(final_book_text)
+    logger.info(f"Saved complete novel to {final_book_file}")
+    logger.info(f"Final novel length: {len(final_book_text)} characters")
+    print(f"✓ Saved complete novel to {final_book_file}")
+
+    # Save final report
+    with open(novel_dir / "final_report.json", "w", encoding="utf-8") as f:
+        json.dump(final_report, f, ensure_ascii=False, indent=2)
+    logger.info(f"Saved final report to {novel_dir / 'final_report.json'}")
+    print(f"✓ Saved final report to {novel_dir / 'final_report.json'}")
+
+    # Save metadata for reference
+    metadata_dict = {
+        "title": metadata.title,
+        "introduction": metadata.introduction,
+        "table_of_contents": metadata.table_of_contents
+    }
+    with open(novel_dir / "novel_metadata.json", "w", encoding="utf-8") as f:
+        json.dump(metadata_dict, f, ensure_ascii=False, indent=2)
+    logger.info(f"Saved metadata to {novel_dir / 'novel_metadata.json'}")
+    print(f"✓ Saved metadata to {novel_dir / 'novel_metadata.json'}")
+    print()
+
+    if success:
+        logger.info("✓✓✓ Novel generation complete and passed quality gates! ✓✓✓")
+        print("\\n✓✓✓ Novel generation complete and passed quality gates! ✓✓✓")
+    else:
+        logger.warning("Novel generation complete but did not pass all quality gates")
+        if final_report.get('issues'):
+            logger.warning(f"Issues: {[issue.get('note') for issue in final_report.get('issues', [])]}")
+        print("\\n⚠ Novel generation complete but did not pass all quality gates")
+        if final_report.get('issues'):
+            print(f"  Issues: {[issue.get('note') for issue in final_report.get('issues', [])]}")
 
     print()
     print("=" * 80)

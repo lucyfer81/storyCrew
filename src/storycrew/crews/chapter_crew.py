@@ -95,17 +95,43 @@ class ChapterCrew:
             try:
                 result = chapter_crew.kickoff(inputs=inputs)
 
-                # Direct access to Pydantic objects
-                scene_list = result.tasks_output[0].pydantic  # SceneList
-                draft = result.tasks_output[1].pydantic  # ChapterDraft
-                updated_bible = result.tasks_output[2].pydantic  # StoryBible
-                revision = result.tasks_output[3].pydantic  # ChapterRevision
-                judge = result.tasks_output[4].pydantic  # JudgeReport
+                # Access task outputs - mixed Pydantic and raw text outputs
+                scene_list = result.tasks_output[0].pydantic  # SceneList (structured output)
+
+                # write_chapter now returns plain text (no Pydantic wrapping)
+                write_output = result.tasks_output[1]
+                if hasattr(write_output, 'raw'):
+                    draft_text = str(write_output.raw)
+                elif hasattr(write_output, 'pydantic'):
+                    # Fallback: if still has pydantic, extract raw_text field
+                    draft_text = write_output.pydantic.raw_text
+                else:
+                    # Last resort: convert to string
+                    draft_text = str(write_output)
+                # Calculate word_count from actual text
+                word_count = len(draft_text)
+
+                updated_bible = result.tasks_output[2].pydantic  # StoryBible (structured output)
+
+                # edit_chapter now returns plain text (no Pydantic wrapping)
+                edit_output = result.tasks_output[3]
+                if hasattr(edit_output, 'raw'):
+                    revision_text = str(edit_output.raw)
+                elif hasattr(edit_output, 'pydantic'):
+                    # Fallback: if still has pydantic, extract revised_text field
+                    revision_text = edit_output.pydantic.revised_text
+                else:
+                    # Last resort: convert to string
+                    revision_text = str(edit_output)
+                # Calculate word_count from actual text
+                revision_word_count = len(revision_text)
+
+                judge = result.tasks_output[4].pydantic  # JudgeReport (structured output)
 
                 # Check if passed quality gate
                 if judge.passed:
                     return {
-                        'chapter_text': revision.revised_text,
+                        'chapter_text': revision_text,  # Use extracted plain text
                         'updated_bible': updated_bible,
                         'judge_report': judge,
                         'attempts': attempt + 1
@@ -135,7 +161,7 @@ class ChapterCrew:
 
         # All retries exhausted
         return {
-            'chapter_text': revision.revised_text,
+            'chapter_text': revision_text,  # Use extracted plain text
             'updated_bible': updated_bible,
             'judge_report': judge,
             'attempts': self.max_retries + 1,

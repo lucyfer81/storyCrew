@@ -79,8 +79,8 @@ class LoggingInterceptor:
 # Import Pydantic models for structured outputs
 from storycrew.models import (
     StorySpec, StorySpecWithResult, Concept, BookOutline, StoryBible,
-    SceneList, ChapterDraft, ChapterRevision, JudgeReport,
-    FinalBook
+    SceneList, ChapterDraft, ChapterRevision, JudgeReport, NovelMetadata
+    # FinalBook removed - assemble_book now outputs plain Markdown text
 )
 
 # Load environment variables
@@ -117,6 +117,7 @@ def get_llm():
             max_tokens=16384,  # Increased token limit for structured output
             max_completion_tokens=16384,  # Alternative token limit parameter
             temperature=0.0,  # Make output more deterministic
+            timeout=1800,  # 30 minutes - accommodate complex chapters (6-9) with validation overhead
             interceptor=interceptor  # Add logging interceptor
         )
     return _llm
@@ -143,7 +144,8 @@ def get_outline_llm():
             base_url=base_url,
             max_tokens=16384,  # Increased token limit for structured output
             max_completion_tokens=16384,  # Alternative token limit parameter
-            temperature=0.0  # Make output more deterministic
+            temperature=0.0,  # Make output more deterministic
+            timeout=1800  # 30 minutes - accommodate long outline generation
         )
     return _outline_llm
 
@@ -168,7 +170,8 @@ def get_llm_by_env(env_var_name: str, default: str = "gpt-4o-mini"):
             base_url=base_url,
             max_tokens=16384,  # Increased token limit for structured output
             max_completion_tokens=16384,  # Alternative token limit parameter
-            temperature=0.0  # Make output more deterministic
+            temperature=0.0,  # Make output more deterministic
+            timeout=1800  # 30 minutes - accommodate complex chapter generation
         )
 
     return _llm_cache[env_var_name]
@@ -284,8 +287,9 @@ class Storycrew():
     @task
     def write_chapter(self) -> Task:
         return Task(
-            config=self.tasks_config['write_chapter'],
-            output_pydantic=ChapterDraft
+            config=self.tasks_config['write_chapter']
+            # Removed output_pydantic=ChapterDraft - plain text output is sufficient
+            # and avoids JSON validation overhead for 3000-word chapter text
         )
 
     @task
@@ -298,8 +302,9 @@ class Storycrew():
     @task
     def edit_chapter(self) -> Task:
         return Task(
-            config=self.tasks_config['edit_chapter'],
-            output_pydantic=ChapterRevision
+            config=self.tasks_config['edit_chapter']
+            # Removed output_pydantic=ChapterRevision - plain text output is sufficient
+            # and avoids JSON validation overhead for 3000-word chapter text
         )
 
     @task
@@ -317,10 +322,18 @@ class Storycrew():
         )
 
     @task
+    def generate_novel_metadata(self) -> Task:
+        return Task(
+            config=self.tasks_config['generate_novel_metadata'],
+            output_pydantic=NovelMetadata
+        )
+
+    @task
     def assemble_book(self) -> Task:
         return Task(
-            config=self.tasks_config['assemble_book'],
-            output_pydantic=FinalBook
+            config=self.tasks_config['assemble_book']
+            # Output plain text (Markdown format) - no Pydantic validation needed
+            # for final book assembly
         )
 
     # ==================== LEGACY SUPPORT ====================
