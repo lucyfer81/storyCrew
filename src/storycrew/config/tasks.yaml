@@ -8,6 +8,19 @@ build_story_spec:
     根据用户输入的题材（genre: {genre}）和主题句（theme_statement: {theme_statement}），
     首先生成一个吸引人的小说名称（2-8个中文字符），然后创建完整的故事规格（StorySpec）和风格指南（StyleGuide）。
 
+    **⚠️ JSON 格式强制约束（输出前必须自检）**
+    1. 所有键名（property names）必须用双引号包围
+       ❌ 错误：{key: "value"} 或 {key: "value",}
+       ✅ 正确：{"key": "value"}
+    2. 不要使用单引号
+       ❌ 错误：{'key': 'value'}
+       ✅ 正确：{"key": "value"}
+    3. 不要有尾随逗号
+       ❌ 错误：{"key": "value",}
+       ✅ 正确：{"key": "value"}
+    4. 确保所有花括号和方括号都正确闭合
+    5. 不要使用省略号或缩写表示继续
+
     用户可能还提供了其他偏好：{additional_preferences}
 
     **第一步：生成小说名称**
@@ -23,7 +36,7 @@ build_story_spec:
     2. 设置叙事视角为第三人称
     3. 总章数：9章，每章目标3000字（允许±10%）
     4. 语言：中文
-    5. 基调：现实、细腻、有张力
+    5. 基调：现实、直白、有张力
     6. 禁忌：未成年人性内容、过度血腥细节、仇恨/歧视性表达
     7. 必须包含：章末钩子、每章信息增量、每章情绪转折
 
@@ -83,7 +96,7 @@ build_story_spec:
           "language": "zh",
           "tone": ["现实", "细腻", "有张力"],
           "pacing": "balanced",
-          "imagery_density": "moderate",
+          "imagery_density": "light",
           "dialogue_ratio": 0.3,
           "forbidden_words": [],
           "style_notes": []
@@ -105,6 +118,22 @@ build_story_spec:
 build_concept:
   description: >
     基于StorySpec创建人物概念和关系网络。
+
+    **⚠️ JSON 格式强制约束（输出前必须自检）**
+    1. 所有键名必须用双引号包围
+    2. 不要使用单引号或尾随逗号
+    3. 确保所有花括号和方括号都正确闭合
+
+    **⚠️ 契约强约束（必须严格遵守，否则会触发Pydantic校验失败）**
+    - characters.role 只能取以下枚举之一：
+      "protagonist" | "antagonist" | "supporting" | "minor"
+      ❌ 不要输出："主角"、"主要角色" 等中文或其他自由文本
+    - relationships.relationship_type 只能取以下枚举之一：
+      "romantic" | "professional" | "family" | "rival" | "friend" | "neutral"
+    - 下列字段必须是 **扁平的字符串数组 List[string]**，禁止嵌套数组、禁止混入对象：
+      personality, secrets, forbidden_phrases
+      ❌ 错误示例： "secrets": ["秘密1", ["禁用短语A","禁用短语B"]]
+      ✅ 正确示例： "secrets": ["秘密1", "秘密2"]
 
     题材：{genre}
     主题句：{theme_statement}
@@ -142,6 +171,12 @@ build_concept:
 build_outline:
   description: >
     基于StorySpec和人物概念设计完整的三幕九章大纲。
+
+    **⚠️ JSON 格式强制约束（输出前必须自检）**
+    1. 所有键名必须用双引号包围
+    2. 不要使用单引号或尾随逗号
+    3. 确保所有花括号和方括号都正确闭合
+    4. 顶层字段名必须是 "chapters"（不是 "outline"）
 
     StorySpec: {story_spec}
     Concept: {concept}
@@ -201,7 +236,7 @@ build_outline:
   expected_output: >
     严格JSON格式：
     {
-      "outline": [9个ChapterOutline对象],
+      "chapters": [9个ChapterOutline对象],
       "plant_payoff_table": [PlantPayoffEntry对象数组],
       "truth_card": {...} (悬疑题材)
     }
@@ -214,6 +249,11 @@ build_outline:
 init_bible:
   description: >
     初始化StoryBible，吸收StorySpec、Concept和Outline的信息。
+
+    **⚠️ JSON 格式强制约束（输出前必须自检）**
+    1. 所有键名必须用双引号包围
+    2. 不要使用单引号或尾随逗号
+    3. 确保所有花括号和方括号都正确闭合
 
     StorySpec: {story_spec}
     Concept: {concept}
@@ -241,10 +281,21 @@ plan_chapter:
   description: >
     为第{chapter_number}章创建详细的SceneList（场景列表）。
 
+    **⚠️ JSON 格式强制约束（输出前必须自检）**
+    1. 所有键名必须用双引号包围
+    2. 不要使用单引号或尾随逗号
+    3. 确保所有花括号和方括号都正确闭合
+
     当前章节：{chapter_number}
     章节大纲：{chapter_outline}
-    StoryBible: {story_bible}
+    StoryBible(public): {story_bible_public}
     StorySpec: {story_spec}
+
+    **字数硬约束（必须自检后再输出）**
+    - total_target_words 固定为 3000
+    - scenes 数组中每个场景必须给出 target_words（建议 350-650）
+    - scenes 内所有 target_words 之和必须等于 total_target_words（允许误差±100字以内）
+      即：abs(sum(scene.target_words) - 3000) <= 100
 
     你需要把章纲细化为6-10个详细的场景，每个场景包含：
     - scene_number (1-10)
@@ -293,7 +344,7 @@ write_chapter:
 
     当前章节：{chapter_number}
     SceneList: {scene_list}
-    StoryBible: {story_bible}
+    StoryBible(public): {story_bible_public}
     StorySpec: {story_spec}
     修订指令（如有）：{revision_instructions}
 
@@ -374,8 +425,14 @@ update_bible:
 
     当前章节：{chapter_number}
     前序任务已生成章节正文，请从上下文中获取。
-    StoryBible: {story_bible}
+    StoryBible(full): {story_bible_full}
     StorySpec: {story_spec}
+
+    **⚠️ 字段类型强制约束**
+    - used_imagery 和 used_metaphors 必须是 **扁平的字符串数组**
+    - ❌ 错误： "used_metaphors": ["比喻1", {"type": "暗喻", "content": "内容"}]
+    - ✅ 正确： "used_metaphors": ["比喻1", "比喻2", "比喻3"]
+    - 每个元素只能是纯字符串，不能是对象或数组
 
     你需要：
     1. 提取新事实：新增的不可更改事实，加入immutable_facts
@@ -404,14 +461,14 @@ edit_chapter:
 
     当前章节：{chapter_number}
     前序任务已生成章节正文，请从上下文中获取。
-    StoryBible: {story_bible}
+    StoryBible(public): {story_bible_public}
     StorySpec: {story_spec}
     修订指令（如有）：{revision_instructions}
 
     基于StyleGuide进行编辑：
     1. 统一文风：确保语气、节奏、意象密度符合StyleGuide
     2. 减少重复：删除冗余表达、重复句式
-    3. 增强画面：加强描写，让场景更生动
+    3. 保持语言简洁直白，避免过度修饰
     4. 统一人物声线：确保对白符合character的speech_pattern
     5. 优化节奏：删除拖沓部分，加快节奏
     6. 避免重复意象：检查StoryBible.used_imagery，避免重复使用相同意象
@@ -435,10 +492,22 @@ judge_chapter:
   description: >
     对第{chapter_number}章进行质量评审，输出JSON格式的评审报告。
 
+    **⚠️ JSON 格式强制约束（输出前必须自检）**
+    1. 所有键名必须用双引号包围
+    2. 不要使用单引号或尾随逗号
+    3. 确保所有花括号和方括号都正确闭合
+
     当前章节：{chapter_number}
     前序任务已生成章节正文，请从上下文中获取。
-    StoryBible: {story_bible}
+    StoryBible(full): {story_bible_full}
     StorySpec: {story_spec}
+
+    **⚠️ issues.type 枚举强约束（必须严格遵守）**
+    issues数组中每个Issue对象的type字段只能是以下9种之一：
+    "continuity", "structure", "motivation", "pacing",
+    "clue_fairness", "prose", "hook", "safety", "word_count"
+    ❌ 不要输出其他type（例如："ending_satisfaction"、"theme_delivery"等）
+    ❌ 不要输出中文type（例如："节奏"、"人物动机"）
 
     评审维度（0-10分）：
     1. continuity (连续性)：是否有与StoryBible矛盾的地方
@@ -497,6 +566,12 @@ judge_chapter:
 judge_whole_book:
   description: >
     对全书进行最终评审，检查伏笔回收、主题兑现、连续性。
+
+    **⚠️ JSON 格式强制约束（输出前必须自检）**
+    1. 所有键名必须用双引号包围
+    2. 不要使用单引号或尾随逗号
+    3. 确保所有花括号和方括号都正确闭合
+    4. 评分字段（plant_payoff_coverage, theme_delivery, ending_satisfaction）直接填写数值，不要放在 issues 数组中
 
     全书正文：{book_text}
     StoryBible: {story_bible}
@@ -593,6 +668,11 @@ judge_whole_book:
 generate_novel_metadata:
   description: >
     根据小说内容生成书名、简介和目录。
+
+    **⚠️ JSON 格式强制约束（输出前必须自检）**
+    1. 所有键名必须用双引号包围
+    2. 不要使用单引号或尾随逗号
+    3. 确保所有花括号和方括号都正确闭合
 
     StorySpec: {story_spec}
     StoryBible: {story_bible}
