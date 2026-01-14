@@ -132,3 +132,12 @@ def test_determine_retry_level_multiple_issues():
     )
     level = determine_retry_level(judge, attempt=0)
     assert level == RetryLevel.FULL_RETRY
+
+def test_determine_retry_level_unknown_issue():
+    """Unknown issue types should default to WRITE_ONLY"""
+    judge = JudgeReport(
+        issues=[Issue(type="prose", severity="low", note="已知问题")]
+    )
+    level = determine_retry_level(judge, attempt=0)
+    # prose is known, so EDIT_ONLY
+    assert level == RetryLevel.EDIT_ONLY

@@ -2,7 +2,8 @@
 from enum import Enum
 from typing import Set, List, Optional
 
-from storycrew.models.judge_report import JudgeReport, Issue
+from storycrew.models.judge_report import JudgeReport
+from storycrew.models.issue import Issue
 
 
 class RetryLevel(Enum):
