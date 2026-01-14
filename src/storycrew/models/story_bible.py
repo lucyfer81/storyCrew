@@ -1,12 +1,12 @@
 """Story Bible models for maintaining continuity."""
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from pydantic import BaseModel, Field
 
 
 class Character(BaseModel):
     """Character card."""
     name: str
-    role: str  # protagonist, antagonist, supporting, etc.
+    role: Literal["protagonist", "antagonist", "supporting", "minor"]
     age: Optional[int] = None
     occupation: Optional[str] = None
     personality: List[str] = Field(default_factory=list)
@@ -22,7 +22,7 @@ class Relationship(BaseModel):
     """Relationship between characters."""
     character_a: str
     character_b: str
-    relationship_type: str  # romantic, professional, family, rival, etc.
+    relationship_type: Literal["romantic", "professional", "family", "rival", "friend", "neutral"]
     status: str = "neutral"  # current state
     history: str = ""
     development_plan: str = ""

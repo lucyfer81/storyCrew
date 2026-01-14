@@ -271,6 +271,40 @@ def _ensure_character_fields(json_str: str) -> str:
     return json.dumps(data, ensure_ascii=False)
 
 
+def _validate_story_bible_enums(story_bible: StoryBible) -> None:
+    """
+    Validate that StoryBible Character.role and Relationship.relationship_type use valid enum values.
+
+    This ensures type consistency between Concept and StoryBible models.
+    Raises ValueError if any invalid enum values are found.
+
+    Args:
+        story_bible: The StoryBible object to validate
+
+    Raises:
+        ValueError: If any role or relationship_type contains invalid enum values
+    """
+    valid_roles = {"protagonist", "antagonist", "supporting", "minor"}
+    valid_relationship_types = {"romantic", "professional", "family", "rival", "friend", "neutral"}
+
+    errors = []
+
+    # Validate Character.role
+    for idx, char in enumerate(story_bible.characters):
+        if char.role not in valid_roles:
+            errors.append(f"characters[{idx}].role = '{char.role}' (not in {valid_roles})")
+
+    # Validate Relationship.relationship_type
+    for idx, rel in enumerate(story_bible.relationships):
+        if rel.relationship_type not in valid_relationship_types:
+            errors.append(f"relationships[{idx}].relationship_type = '{rel.relationship_type}' (not in {valid_relationship_types})")
+
+    if errors:
+        error_msg = "StoryBible enum validation failed:\n" + "\n".join(errors)
+        logger.error(f"[VALIDATION ERROR] {error_msg}")
+        raise ValueError(error_msg)
+
+
 # Monkey-patch CrewAI's converter to apply JSON repairs
 import crewai.utilities.converter as converter_module
 _original_handle_partial_json = converter_module.handle_partial_json
@@ -474,6 +508,9 @@ class InitCrew:
 
         result4 = crew4.kickoff(inputs=inputs_4)
         story_bible = result4.tasks_output[0].pydantic  # Direct Pydantic object
+
+        # Validate enum values match Concept model
+        _validate_story_bible_enums(story_bible)
 
         # Return all results
         return {
