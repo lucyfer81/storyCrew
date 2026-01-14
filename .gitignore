@@ -1,0 +1,25 @@
+# Ignore everything
+*
+
+# But include these specific files and directories
+!src/
+!docs/
+!pyproject.toml
+!README.md
+
+# Also ignore .gitignore itself from being negated
+.gitignore
+
+# Common patterns to explicitly ignore (just in case)
+.env
+*.pyc
+__pycache__/
+*.log
+.venv/
+venv/
+*.swp
+*.swo
+*~
+.DS_Store
+.claude/
+.serena/
