@@ -53,8 +53,8 @@ def _ensure_clue_fields(json_str: str) -> str:
     """
     Ensure all Clue objects have required fields.
 
-    Fixes missing 'description' field in Clue objects by adding
-    a meaningful placeholder that includes the clue_id.
+    Fixes missing 'description' and 'clue_id' fields in Clue objects by adding
+    meaningful placeholders or auto-generated IDs.
 
     Args:
         json_str: JSON string potentially containing incomplete Clue objects
@@ -71,8 +71,14 @@ def _ensure_clue_fields(json_str: str) -> str:
     if 'clues' in data and isinstance(data['clues'], dict):
         for clue_list_key in ['planted', 'resolved', 'open']:
             if clue_list_key in data['clues'] and isinstance(data['clues'][clue_list_key], list):
-                for clue in data['clues'][clue_list_key]:
+                for idx, clue in enumerate(data['clues'][clue_list_key]):
                     if isinstance(clue, dict):
+                        # Ensure clue_id field exists (auto-generate if missing)
+                        if 'clue_id' not in clue or not clue['clue_id']:
+                            chapter = clue.get('chapter_introduced', '?')
+                            clue['clue_id'] = f"clue_{clue_list_key}_{chapter}_{idx+1:03d}"
+                            logger.info(f"[CLUE REPAIR] Added missing clue_id: {clue['clue_id']}")
+
                         # Ensure description field exists
                         if 'description' not in clue or not clue['description']:
                             clue_id = clue.get('clue_id', 'unknown')
@@ -140,6 +146,47 @@ def _ensure_timeline_event_fields(json_str: str) -> str:
                         # If no number found, set to None
                         event['scene'] = None
                         logger.info(f"[TIMELINE REPAIR] Set scene to None for timeline[{i}] (could not parse number)")
+
+    return json.dumps(data, ensure_ascii=False)
+
+
+def _ensure_array_field_types(json_str: str) -> str:
+    """
+    Ensure array fields that should contain only strings actually contain strings.
+
+    Fixes issues where LLM accidentally puts objects or nested arrays into
+    string array fields like used_metaphors, used_imagery, etc.
+
+    Args:
+        json_str: JSON string potentially containing corrupted array fields
+
+    Returns:
+        JSON string with all string arrays flattened to contain only strings
+    """
+    try:
+        data = json.loads(json_str)
+    except (json.JSONDecodeError, TypeError):
+        return json_str  # If not valid JSON, return as-is
+
+    # Fields that must be flat string arrays
+    string_array_fields = ['used_imagery', 'used_metaphors', 'immutable_facts']
+
+    for field in string_array_fields:
+        if field in data and isinstance(data[field], list):
+            cleaned_array = []
+            for i, item in enumerate(data[field]):
+                if isinstance(item, str):
+                    # Keep strings as-is
+                    cleaned_array.append(item)
+                elif isinstance(item, (list, dict)):
+                    # Convert objects/lists to string representation
+                    cleaned_array.append(str(item))
+                    logger.info(f"[ARRAY REPAIR] Converted {field}[{i}] from {type(item).__name__} to string")
+                else:
+                    # Convert other types to string
+                    cleaned_array.append(str(item))
+                    logger.info(f"[ARRAY REPAIR] Converted {field}[{i}] from {type(item).__name__} to string")
+            data[field] = cleaned_array
 
     return json.dumps(data, ensure_ascii=False)
 
@@ -272,10 +319,10 @@ def _patched_handle_partial_json(result: str, model: type, is_json_output: bool 
         if model == StoryBible:
             logger.info("[STORYBIBLE REPAIR] Applying field completion for StoryBible")
 
-            # Fix Clue objects (missing description)
+            # Fix Clue objects (missing clue_id, description)
             repaired_after_clues = _ensure_clue_fields(repaired)
             if repaired_after_clues != repaired:
-                logger.info("[STORYBIBLE REPAIR] Fixed missing Clue.description fields")
+                logger.info("[STORYBIBLE REPAIR] Fixed missing Clue fields")
                 repaired = repaired_after_clues
 
             # Fix TimelineEvent objects (missing event, wrong scene type)
@@ -289,6 +336,12 @@ def _patched_handle_partial_json(result: str, model: type, is_json_output: bool 
             if repaired_after_characters != repaired:
                 logger.info("[STORYBIBLE REPAIR] Fixed Character field issues")
                 repaired = repaired_after_characters
+
+            # Fix array field types (used_metaphors, used_imagery containing non-strings)
+            repaired_after_arrays = _ensure_array_field_types(repaired)
+            if repaired_after_arrays != repaired:
+                logger.info("[STORYBIBLE REPAIR] Fixed array field type issues")
+                repaired = repaired_after_arrays
 
         # Step 3: Retry parsing with repaired JSON
         try:

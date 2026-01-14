@@ -3,6 +3,7 @@ import logging
 from crewai import Crew, Process, Task
 from storycrew.crew import Storycrew
 from typing import Dict, Any, Optional
+from copy import deepcopy
 
 logger = logging.getLogger("StoryCrew")
 
@@ -39,13 +40,30 @@ class ChapterCrew:
                 - judge_report: JudgeReport for this chapter
                 - attempts: Number of attempts made
         """
+        # ===============================
+        # StoryBible access control
+        # ===============================
+        # For mystery genre, StoryBible may contain truth_card (final truth).
+        # To avoid accidental leakage, we pass a "public" StoryBible (truth_card removed)
+        # to chapter_planner / chapter_writer / line_editor.
+        #
+        # NOTE: As requested, we KEEP current behavior for critic_judge:
+        # critic_judge continues to see the full StoryBible (including truth_card).
+        story_bible_dict = story_bible.model_dump() if hasattr(story_bible, 'model_dump') else story_bible
+        story_spec_dict = story_spec.model_dump() if hasattr(story_spec, 'model_dump') else story_spec
+
+        story_bible_public = deepcopy(story_bible_dict)
+        if isinstance(story_bible_public, dict) and "truth_card" in story_bible_public:
+            story_bible_public.pop("truth_card", None)
+
         # Prepare inputs - convert Pydantic objects to dicts for CrewAI
         inputs = {
             "chapter_number": chapter_number,
             "chapter_outline": chapter_outline.model_dump() if hasattr(chapter_outline, 'model_dump') else chapter_outline,
             "scene_list": "",  # Placeholder for plan_chapter to generate
-            "story_bible": story_bible.model_dump() if hasattr(story_bible, 'model_dump') else story_bible,
-            "story_spec": story_spec.model_dump() if hasattr(story_spec, 'model_dump') else story_spec,
+            "story_bible_public": story_bible_public,  # For planner/writer/editor
+            "story_bible_full": story_bible_dict,      # For update_bible/judge
+            "story_spec": story_spec_dict,
             "revision_instructions": revision_instructions or "",
         }
 
@@ -64,17 +82,17 @@ class ChapterCrew:
         write_task.agent = chapter_writer
         write_task.context = [plan_task]
 
-        update_bible_task = self.base_crew.update_bible()
-        update_bible_task.agent = continuity_keeper
-        update_bible_task.context = [plan_task, write_task]
-
         edit_task = self.base_crew.edit_chapter()
         edit_task.agent = line_editor
-        edit_task.context = [plan_task, write_task, update_bible_task]
+        edit_task.context = [plan_task, write_task]
 
         judge_task = self.base_crew.judge_chapter()
         judge_task.agent = critic_judge
-        judge_task.context = [plan_task, write_task, update_bible_task, edit_task]
+        judge_task.context = [plan_task, write_task, edit_task]
+
+        update_bible_task = self.base_crew.update_bible()
+        update_bible_task.agent = continuity_keeper
+        update_bible_task.context = [plan_task, write_task, edit_task]
 
         # Create sequential crew
         chapter_crew = Crew(
@@ -85,7 +103,7 @@ class ChapterCrew:
                 line_editor,
                 critic_judge
             ],
-            tasks=[plan_task, write_task, update_bible_task, edit_task, judge_task],
+            tasks=[plan_task, write_task, edit_task, judge_task, update_bible_task],
             process=Process.sequential,
             verbose=True
         )
@@ -111,10 +129,8 @@ class ChapterCrew:
                 # Calculate word_count from actual text
                 word_count = len(draft_text)
 
-                updated_bible = result.tasks_output[2].pydantic  # StoryBible (structured output)
-
                 # edit_chapter now returns plain text (no Pydantic wrapping)
-                edit_output = result.tasks_output[3]
+                edit_output = result.tasks_output[2]
                 if hasattr(edit_output, 'raw'):
                     revision_text = str(edit_output.raw)
                 elif hasattr(edit_output, 'pydantic'):
@@ -126,7 +142,9 @@ class ChapterCrew:
                 # Calculate word_count from actual text
                 revision_word_count = len(revision_text)
 
-                judge = result.tasks_output[4].pydantic  # JudgeReport (structured output)
+                judge = result.tasks_output[3].pydantic  # JudgeReport (structured output)
+
+                updated_bible = result.tasks_output[4].pydantic  # StoryBible (structured output)
 
                 # Check if passed quality gate
                 if judge.passed:

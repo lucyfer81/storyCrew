@@ -114,8 +114,8 @@ def get_llm():
             model=llm_model,
             api_key=api_key,
             base_url=base_url,
-            max_tokens=16384,  # Increased token limit for structured output
-            max_completion_tokens=16384,  # Alternative token limit parameter
+            max_tokens=65536,  # 64K tokens - DeepSeek-V3.1 supports up to 163K output
+            max_completion_tokens=65536,  # Alternative token limit parameter
             temperature=0.0,  # Make output more deterministic
             timeout=1800,  # 30 minutes - accommodate complex chapters (6-9) with validation overhead
             interceptor=interceptor  # Add logging interceptor
@@ -142,8 +142,8 @@ def get_outline_llm():
             model=llm_model,
             api_key=api_key,
             base_url=base_url,
-            max_tokens=16384,  # Increased token limit for structured output
-            max_completion_tokens=16384,  # Alternative token limit parameter
+            max_tokens=65536,  # 64K tokens - DeepSeek-V3.1 supports up to 163K output
+            max_completion_tokens=65536,  # Alternative token limit parameter
             temperature=0.0,  # Make output more deterministic
             timeout=1800  # 30 minutes - accommodate long outline generation
         )
@@ -168,8 +168,8 @@ def get_llm_by_env(env_var_name: str, default: str = "gpt-4o-mini"):
             model=llm_model,
             api_key=api_key,
             base_url=base_url,
-            max_tokens=16384,  # Increased token limit for structured output
-            max_completion_tokens=16384,  # Alternative token limit parameter
+            max_tokens=65536,  # 64K tokens - DeepSeek-V3.1 supports up to 163K output
+            max_completion_tokens=65536,  # Alternative token limit parameter
             temperature=0.0,  # Make output more deterministic
             timeout=1800  # 30 minutes - accommodate complex chapter generation
         )
