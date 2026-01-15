@@ -662,6 +662,59 @@ def run(
     logger.info(f"Novel directory: {novel_dir.absolute()}")
     logger.info(f"Start time: {generation_metadata['start_time']}")
     logger.info(f"End time: {generation_metadata['end_time']}")
+
+    # ==================== ADD TOKEN USAGE SUMMARY ====================
+    logger.info("=" * 80)
+    logger.info("[TOKEN USAGE] LLM Token Usage Summary")
+    logger.info("=" * 80)
+
+    try:
+        from storycrew.crew import get_llm
+        llm_instance = get_llm()
+
+        # Get token usage summary from CrewAI LLM
+        token_summary = llm_instance.get_token_usage_summary()
+
+        if token_summary:
+            total_prompt_tokens = token_summary.get('prompt_tokens', 0)
+            total_completion_tokens = token_summary.get('completion_tokens', 0)
+            total_tokens = token_summary.get('total_tokens', total_prompt_tokens + total_completion_tokens)
+
+            logger.info(f"[TOKEN USAGE] 📊 Total Token Usage:")
+            logger.info(f"[TOKEN USAGE]   Input (prompt):  {total_prompt_tokens:,} tokens")
+            logger.info(f"[TOKEN USAGE]   Output (completion): {total_completion_tokens:,} tokens")
+            logger.info(f"[TOKEN USAGE]   Total: {total_tokens:,} tokens")
+
+            # Calculate cost estimate (rough estimate: $0.50 per 1M input, $1.50 per 1M output)
+            input_cost = (total_prompt_tokens / 1_000_000) * 0.50
+            output_cost = (total_completion_tokens / 1_000_000) * 1.50
+            total_cost = input_cost + output_cost
+            logger.info(f"[TOKEN USAGE]   Est. Total Cost: ${total_cost:.4f}")
+
+            # Also print to console
+            print()
+            print("=" * 80)
+            print("Token Usage Summary")
+            print("=" * 80)
+            print(f"Input tokens:  {total_prompt_tokens:,}")
+            print(f"Output tokens: {total_completion_tokens:,}")
+            print(f"Total tokens:  {total_tokens:,}")
+            print(f"Est. Cost: ${total_cost:.4f}")
+            print("=" * 80)
+
+            # Save to metadata
+            generation_metadata['token_usage'] = {
+                'prompt_tokens': total_prompt_tokens,
+                'completion_tokens': total_completion_tokens,
+                'total_tokens': total_tokens,
+                'estimated_cost_usd': total_cost
+            }
+        else:
+            logger.info("[TOKEN USAGE] No token usage data available (LLM may not support tracking)")
+    except Exception as e:
+        logger.warning(f"[TOKEN USAGE] Could not retrieve token usage summary: {e}")
+    # ==================== END TOKEN USAGE SUMMARY ====================
+
     logger.info("=" * 80)
     logger.info("StoryCrew Novel Generation Completed")
     logger.info("=" * 80)
