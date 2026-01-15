@@ -271,7 +271,12 @@ class ChapterCrew:
         revision_instructions: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Generate a single chapter with structured outputs and automatic retry.
+        Generate a single chapter with structured outputs and selective retry.
+
+        Implements three-level selective retry based on judge_report.issues types:
+        - EDIT_ONLY: prose/pacing/word_count issues → only re-run edit + judge
+        - WRITE_ONLY: motivation/hook/clue_fairness/continuity → re-run write + edit + judge
+        - FULL_RETRY: structure/safety(critical) → re-run full pipeline
 
         Args:
             chapter_number: Chapter number (1-9)
@@ -290,12 +295,6 @@ class ChapterCrew:
         # ===============================
         # StoryBible access control
         # ===============================
-        # For mystery genre, StoryBible may contain truth_card (final truth).
-        # To avoid accidental leakage, we pass a "public" StoryBible (truth_card removed)
-        # to chapter_planner / chapter_writer / line_editor.
-        #
-        # NOTE: As requested, we KEEP current behavior for critic_judge:
-        # critic_judge continues to see the full StoryBible (including truth_card).
         story_bible_dict = story_bible.model_dump() if hasattr(story_bible, 'model_dump') else story_bible
         story_spec_dict = story_spec.model_dump() if hasattr(story_spec, 'model_dump') else story_spec
 
@@ -303,130 +302,129 @@ class ChapterCrew:
         if isinstance(story_bible_public, dict) and "truth_card" in story_bible_public:
             story_bible_public.pop("truth_card", None)
 
-        # Prepare inputs - convert Pydantic objects to dicts for CrewAI
+        # Initialize state
+        state = ChapterGenerationState(current_attempt=0)
+
+        # Prepare initial inputs
         inputs = {
             "chapter_number": chapter_number,
             "chapter_outline": chapter_outline.model_dump() if hasattr(chapter_outline, 'model_dump') else chapter_outline,
             "scene_list": "",  # Placeholder for plan_chapter to generate
-            "story_bible_public": story_bible_public,  # For planner/writer/editor
-            "story_bible_full": story_bible_dict,      # For update_bible/judge
+            "story_bible_public": story_bible_public,
+            "story_bible_full": story_bible_dict,
             "story_spec": story_spec_dict,
             "revision_instructions": revision_instructions or "",
         }
 
-        # Get agents
-        chapter_planner = self.base_crew.chapter_planner()
-        chapter_writer = self.base_crew.chapter_writer()
-        continuity_keeper = self.base_crew.continuity_keeper()
-        line_editor = self.base_crew.line_editor()
-        critic_judge = self.base_crew.critic_judge()
-
-        # Create tasks using pre-configured tasks from base_crew
-        plan_task = self.base_crew.plan_chapter()
-        plan_task.agent = chapter_planner
-
-        write_task = self.base_crew.write_chapter()
-        write_task.agent = chapter_writer
-        write_task.context = [plan_task]
-
-        edit_task = self.base_crew.edit_chapter()
-        edit_task.agent = line_editor
-        edit_task.context = [plan_task, write_task]
-
-        judge_task = self.base_crew.judge_chapter()
-        judge_task.agent = critic_judge
-        judge_task.context = [plan_task, write_task, edit_task]
-
-        update_bible_task = self.base_crew.update_bible()
-        update_bible_task.agent = continuity_keeper
-        update_bible_task.context = [plan_task, write_task, edit_task]
-
-        # Create sequential crew
-        chapter_crew = Crew(
-            agents=[
-                chapter_planner,
-                chapter_writer,
-                continuity_keeper,
-                line_editor,
-                critic_judge
-            ],
-            tasks=[plan_task, write_task, edit_task, judge_task, update_bible_task],
-            process=Process.sequential,
-            verbose=True
-        )
-
-        # Execute with retry logic for both quality gates AND exceptions
+        # Main retry loop
         for attempt in range(self.max_retries + 1):
+            state.current_attempt = attempt
+
             try:
-                result = chapter_crew.kickoff(inputs=inputs)
+                # === 根据上一次的重试级别决定运行策略 ===
+                if attempt == 0 or state.last_retry_level == RetryLevel.FULL_RETRY.value or state.last_retry_level is None:
+                    result = self._run_full_pipeline(inputs, state)
 
-                # Access task outputs - mixed Pydantic and raw text outputs
-                scene_list = result.tasks_output[0].pydantic  # SceneList (structured output)
+                elif state.last_retry_level == RetryLevel.WRITE_ONLY.value:
+                    # Check if scene_list recovery is needed
+                    if "scene_list" in inputs:
+                        scene_list = self._parse_scene_list_safe(inputs["scene_list"])
+                        if scene_list is None:
+                            logger.warning("SceneList 恢复失败，降级到 FULL_RETRY")
+                            state.last_retry_level = RetryLevel.FULL_RETRY.value
+                            result = self._run_full_pipeline(inputs, state)
+                        else:
+                            result = self._run_write_retry(inputs, state)
+                    else:
+                        logger.warning("scene_list 缺失，降级到 FULL_RETRY")
+                        state.last_retry_level = RetryLevel.FULL_RETRY.value
+                        result = self._run_full_pipeline(inputs, state)
 
-                # write_chapter now returns plain text (no Pydantic wrapping)
-                write_output = result.tasks_output[1]
-                if hasattr(write_output, 'raw'):
-                    draft_text = str(write_output.raw)
-                elif hasattr(write_output, 'pydantic'):
-                    # Fallback: if still has pydantic, extract raw_text field
-                    draft_text = write_output.pydantic.raw_text
+                elif state.last_retry_level == RetryLevel.EDIT_ONLY.value:
+                    result = self._run_edit_retry(inputs, state)
+
                 else:
-                    # Last resort: convert to string
-                    draft_text = str(write_output)
-                # Calculate word_count from actual text
-                word_count = len(draft_text)
+                    # Unknown retry level, default to full
+                    logger.warning(f"未知的重试级别 {state.last_retry_level}，使用 FULL_RETRY")
+                    state.last_retry_level = RetryLevel.FULL_RETRY.value
+                    result = self._run_full_pipeline(inputs, state)
 
-                # edit_chapter now returns plain text (no Pydantic wrapping)
-                edit_output = result.tasks_output[2]
-                if hasattr(edit_output, 'raw'):
-                    revision_text = str(edit_output.raw)
-                elif hasattr(edit_output, 'pydantic'):
-                    # Fallback: if still has pydantic, extract revised_text field
-                    revision_text = edit_output.pydantic.revised_text
+                # === 更新状态 ===
+                self._update_state_from_result(state, result)
+
+                # === 提取结果 ===
+                outputs = result.tasks_output
+
+                # 根据 retry_level 和输出数量提取 judge 和 updated_bible
+                if state.last_retry_level == RetryLevel.EDIT_ONLY.value:
+                    # EDIT_ONLY: [edit_output, judge, updated_bible]
+                    judge = outputs[1].pydantic
+                    updated_bible = outputs[2].pydantic
+                    revision_text = state.revision_text
+
+                elif state.last_retry_level == RetryLevel.WRITE_ONLY.value:
+                    # WRITE_ONLY: [write_output, edit_output, judge, updated_bible]
+                    judge = outputs[2].pydantic
+                    updated_bible = outputs[3].pydantic
+                    revision_text = state.revision_text
+
                 else:
-                    # Last resort: convert to string
-                    revision_text = str(edit_output)
-                # Calculate word_count from actual text
-                revision_word_count = len(revision_text)
+                    # FULL_RETRY 或第一次: [scene_list, write_output, edit_output, judge, updated_bible]
+                    judge = outputs[3].pydantic
+                    updated_bible = outputs[4].pydantic
+                    revision_text = state.revision_text
 
-                judge = result.tasks_output[3].pydantic  # JudgeReport (structured output)
-
-                updated_bible = result.tasks_output[4].pydantic  # StoryBible (structured output)
-
-                # Check if passed quality gate
+                # === 检查是否通过 ===
                 if judge.passed:
+                    logger.info(f"Chapter {chapter_number} passed after {attempt + 1} attempts")
                     return {
-                        'chapter_text': revision_text,  # Use extracted plain text
+                        'chapter_text': revision_text,
                         'updated_bible': updated_bible,
                         'judge_report': judge,
                         'attempts': attempt + 1
                     }
 
-                # Failed quality gate - prepare for retry
-                if attempt < self.max_retries:
-                    # Update revision instructions for next attempt
-                    inputs["revision_instructions"] = "\n".join(judge.revision_instructions)
+                # === Judge 失败，确定下一轮重试级别 ===
+                retry_level = determine_retry_level(judge, attempt)
+                logger.info(f"Chapter {chapter_number} attempt {attempt + 1} failed, retry_level={retry_level.value}")
+
+                # === 检查重试次数限制 ===
+                if retry_level == RetryLevel.EDIT_ONLY and state.last_retry_level == RetryLevel.EDIT_ONLY.value:
+                    state.edit_retry_count += 1
+                    if state.edit_retry_count >= MAX_EDIT_RETRIES:
+                        logger.warning(f"EDIT_ONLY 重试次数已达上限 ({MAX_EDIT_RETRIES})，升级到 WRITE_ONLY")
+                        retry_level = RetryLevel.WRITE_ONLY
+                        state.edit_retry_count = 0
+                else:
+                    # 重置计数器
+                    state.edit_retry_count = 0
+
+                state.last_retry_level = retry_level.value
+
+                # === 更新 inputs（保留需要的中间结果）===
+                preserved_inputs = state.to_preserve(retry_level)
+                inputs.update(preserved_inputs)
+
+                # === 更新 revision_instructions ===
+                inputs["revision_instructions"] = "\n".join(judge.revision_instructions)
 
             except Exception as e:
-                # Exception during generation (timeout, validation error, etc.)
+                # Exception during generation
                 error_type = type(e).__name__
                 error_msg = str(e)
 
-                # If this is the last attempt or a critical error, re-raise to main.py
                 if attempt >= self.max_retries:
                     logger.error(f"Chapter {chapter_number} failed after {attempt + 1} attempts: {error_type}: {error_msg[:100]}")
                     raise
 
-                # Log and retry
                 logger.warning(f"Chapter {chapter_number} attempt {attempt + 1} failed with {error_type}: {error_msg[:100]}, retrying...")
-                # Clear revision instructions for clean retry
                 inputs["revision_instructions"] = ""
-                # Continue to next iteration of retry loop
                 continue
 
         # All retries exhausted
+        logger.error(f"Chapter {chapter_number} failed after {self.max_retries + 1} attempts")
         return {
-            'chapter_text': revision_text,  # Use extracted plain text
+            'chapter_text': revision_text,
             'updated_bible': updated_bible,
             'judge_report': judge,
             'attempts': self.max_retries + 1,
