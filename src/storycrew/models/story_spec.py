@@ -21,7 +21,7 @@ class StyleGuide(BaseModel):
     language: str = "zh"
     tone: List[str] = Field(default_factory=lambda: ["现实", "细腻", "有张力"])
     pacing: Literal["slow", "balanced", "fast", "variable"] = "balanced"
-    imagery_density: Literal["sparse", "moderate", "rich", "dense"] = "moderate"
+    imagery_density: Literal["sparse", "light", "moderate", "rich", "dense"] = "moderate"
     dialogue_ratio: float = Field(default=0.3, ge=0.0, le=1.0)
     forbidden_words: List[str] = Field(default_factory=list)
     style_notes: List[str] = Field(default_factory=list)

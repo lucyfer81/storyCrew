@@ -344,13 +344,6 @@ write_chapter:
 
     当前章节：{chapter_number}
     SceneList: {scene_list}
-
-    # === 选择性重试支持 ===
-    # 如果 {scene_list} 为空或 {scene_list_for_write} 有值（表示重试模式），
-    # 优先使用 scene_list_for_write；否则使用 scene_list。
-    # 注意：scene_list_for_write 是上一次 plan_chapter 生成的 SceneList 的 JSON 字符串。
-    已保存场景列表（如有）：{scene_list_for_write}
-
     StoryBible(public): {story_bible_public}
     StorySpec: {story_spec}
     修订指令（如有）：{revision_instructions}
@@ -360,12 +353,6 @@ write_chapter:
     第X章：章标题
     小引：80-150字，像书摘/预告，不剧透终局
     正文：约3000字（允许2700-3300字），章末必须有钩子
-
-    **重要 SceneList 使用规则**:
-    - 如果 scene_list_for_write 非空，请使用它作为场景列表
-    - 如果 scene_list_for_write 为空，使用 scene_list
-    - 严格按照 SceneList 的场景顺序和场景目的写作
-    - 如果两个都为空，请基于 chapter_outline 自行规划场景
 
     写作要求：
     1. 严格按照SceneList的场景顺序和场景目的写作
@@ -477,14 +464,6 @@ edit_chapter:
     StoryBible(public): {story_bible_public}
     StorySpec: {story_spec}
     修订指令（如有）：{revision_instructions}
-
-    # === 选择性重试支持 ===
-    # 如果 {draft_text_for_edit} 有值（表示重试模式），直接使用它作为编辑对象；
-    # 否则从上下文获取 write_chapter 的输出（正常模式）。
-    已保存草稿（如有）：{draft_text_for_edit}
-
-    **重要**: draft_text_for_edit 优先级高于上下文中的 write_chapter 输出。
-    如果 draft_text_for_edit 非空，请直接编辑该文本，无需从上下文查找。
 
     基于StyleGuide进行编辑：
     1. 统一文风：确保语气、节奏、意象密度符合StyleGuide

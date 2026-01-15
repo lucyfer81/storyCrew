@@ -358,6 +358,14 @@ def run(
 
         print()
 
+        # === Inter-chapter delay to avoid TPM rate limit accumulation ===
+        if chapter_num < 9:  # No need to delay after the last chapter
+            delay_seconds = 30
+            logger.info(f"Waiting {delay_seconds}s before next chapter to avoid TPM rate limiting...")
+            print(f"⏳ Waiting {delay_seconds}s before next chapter (avoiding rate limiting)...")
+            import time
+            time.sleep(delay_seconds)
+
     # Save updated StoryBible
     logger.info("Saving final StoryBible...")
     with open(novel_dir / "story_bible_final.json", "w", encoding="utf-8") as f:
