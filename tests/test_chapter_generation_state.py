@@ -12,6 +12,7 @@ def test_state_initialization():
     assert state.current_attempt == 0
     assert state.last_retry_level is None
     assert state.edit_retry_count == 0
+    assert state.write_retry_count == 0
 
 def test_state_with_values():
     """State should store provided values"""
@@ -21,7 +22,8 @@ def test_state_with_values():
         revision_text="修订文本",
         current_attempt=1,
         last_retry_level="edit_only",
-        edit_retry_count=2
+        edit_retry_count=2,
+        write_retry_count=3
     )
     assert state.scene_list == '{"scenes": []}'
     assert state.draft_text == "草稿文本"
@@ -29,6 +31,7 @@ def test_state_with_values():
     assert state.current_attempt == 1
     assert state.last_retry_level == "edit_only"
     assert state.edit_retry_count == 2
+    assert state.write_retry_count == 3
 
 def test_to_preserve_edit_only():
     """EDIT_ONLY should preserve scene_list and draft_text_for_edit"""

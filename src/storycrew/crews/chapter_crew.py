@@ -330,13 +330,13 @@ class ChapterCrew:
                     if "scene_list" in inputs:
                         scene_list = self._parse_scene_list_safe(inputs["scene_list"])
                         if scene_list is None:
-                            logger.warning("SceneList 恢复失败，降级到 FULL_RETRY")
+                            logger.warning("SceneList recovery failed, falling back to FULL_RETRY")
                             state.last_retry_level = RetryLevel.FULL_RETRY.value
                             result = self._run_full_pipeline(inputs, state)
                         else:
                             result = self._run_write_retry(inputs, state)
                     else:
-                        logger.warning("scene_list 缺失，降级到 FULL_RETRY")
+                        logger.warning("scene_list missing, falling back to FULL_RETRY")
                         state.last_retry_level = RetryLevel.FULL_RETRY.value
                         result = self._run_full_pipeline(inputs, state)
 
@@ -345,7 +345,7 @@ class ChapterCrew:
 
                 else:
                     # Unknown retry level, default to full
-                    logger.warning(f"未知的重试级别 {state.last_retry_level}，使用 FULL_RETRY")
+                    logger.warning(f"Unknown retry level {state.last_retry_level}, using FULL_RETRY")
                     state.last_retry_level = RetryLevel.FULL_RETRY.value
                     result = self._run_full_pipeline(inputs, state)
 
@@ -395,9 +395,16 @@ class ChapterCrew:
                         logger.warning(f"EDIT_ONLY 重试次数已达上限 ({MAX_EDIT_RETRIES})，升级到 WRITE_ONLY")
                         retry_level = RetryLevel.WRITE_ONLY
                         state.edit_retry_count = 0
+                elif retry_level == RetryLevel.WRITE_ONLY and state.last_retry_level == RetryLevel.WRITE_ONLY.value:
+                    state.write_retry_count += 1
+                    if state.write_retry_count >= MAX_WRITE_RETRIES:
+                        logger.warning(f"WRITE_ONLY retry count reached max ({MAX_WRITE_RETRIES}), escalating to FULL_RETRY")
+                        retry_level = RetryLevel.FULL_RETRY
+                        state.write_retry_count = 0
                 else:
                     # 重置计数器
                     state.edit_retry_count = 0
+                    state.write_retry_count = 0
 
                 state.last_retry_level = retry_level.value
 

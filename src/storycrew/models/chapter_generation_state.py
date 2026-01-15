@@ -37,6 +37,9 @@ class ChapterGenerationState(BaseModel):
     edit_retry_count: int = 0
     """EDIT_ONLY 级别的连续重试计数（用于升级到 WRITE_ONLY）"""
 
+    write_retry_count: int = 0
+    """WRITE_ONLY 级别的连续重试计数（用于升级到 FULL_RETRY）"""
+
     def to_preserve(self, retry_level: RetryLevel) -> Dict[str, Any]:
         """根据重试级别返回需要保留的输入字段
 
