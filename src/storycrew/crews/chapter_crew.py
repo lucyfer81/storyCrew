@@ -152,6 +152,15 @@ class ChapterCrew:
         """
         logger.info(f"Running EDIT_ONLY retry (attempt={state.current_attempt}, edit_count={state.edit_retry_count})")
 
+        # [DIAGNOSTIC] Log inputs at start of EDIT_ONLY retry
+        logger.info(f"[DIAGNOSTIC] EDIT_ONLY _run_edit_retry: inputs keys={list(inputs.keys())}")
+        logger.info(f"[DIAGNOSTIC] EDIT_ONLY _run_edit_retry: draft_text_for_edit in inputs={'draft_text_for_edit' in inputs}")
+        if 'draft_text_for_edit' in inputs:
+            logger.info(f"[DIAGNOSTIC] EDIT_ONLY _run_edit_retry: draft_text_for_edit length={len(inputs['draft_text_for_edit'])}, first_100={inputs['draft_text_for_edit'][:100]}")
+        logger.info(f"[DIAGNOSTIC] EDIT_ONLY _run_edit_retry: scene_list in inputs={'scene_list' in inputs}")
+        if 'scene_list' in inputs and inputs['scene_list']:
+            logger.info(f"[DIAGNOSTIC] EDIT_ONLY _run_edit_retry: scene_list length={len(inputs['scene_list'])}")
+
         # Get agents
         line_editor = self.base_crew.line_editor()
         critic_judge = self.base_crew.critic_judge()
@@ -215,6 +224,9 @@ class ChapterCrew:
                 else:
                     state.draft_text = str(outputs[1])
 
+                # [DIAGNOSTIC] Log draft_text extraction
+                logger.info(f"[DIAGNOSTIC] FULL_RETRY: Extracted draft_text, length={len(state.draft_text) if state.draft_text else 0}, first_100_chars={state.draft_text[:100] if state.draft_text else 'None'}")
+
                 # Extract revision_text
                 if hasattr(outputs[2], 'raw'):
                     state.revision_text = str(outputs[2].raw)
@@ -238,6 +250,9 @@ class ChapterCrew:
                     state.draft_text = outputs[0].pydantic.raw_text
                 else:
                     state.draft_text = str(outputs[0])
+
+                # [DIAGNOSTIC] Log draft_text extraction
+                logger.info(f"[DIAGNOSTIC] WRITE_ONLY: Extracted draft_text, length={len(state.draft_text) if state.draft_text else 0}, first_100_chars={state.draft_text[:100] if state.draft_text else 'None'}")
 
                 # Extract revision_text
                 if hasattr(outputs[1], 'raw'):
@@ -310,6 +325,8 @@ class ChapterCrew:
             "chapter_number": chapter_number,
             "chapter_outline": chapter_outline.model_dump() if hasattr(chapter_outline, 'model_dump') else chapter_outline,
             "scene_list": "",  # Placeholder for plan_chapter to generate
+            "scene_list_for_write": "",  # For WRITE_ONLY retry: use saved scene_list
+            "draft_text_for_edit": "",  # For EDIT_ONLY retry: use saved draft_text
             "story_bible_public": story_bible_public,
             "story_bible_full": story_bible_dict,
             "story_spec": story_spec_dict,
@@ -334,6 +351,9 @@ class ChapterCrew:
                             state.last_retry_level = RetryLevel.FULL_RETRY.value
                             result = self._run_full_pipeline(inputs, state)
                         else:
+                            # Add scene_list_for_write for selective retry
+                            if hasattr(state, 'scene_list') and state.scene_list:
+                                inputs["scene_list_for_write"] = state.scene_list
                             result = self._run_write_retry(inputs, state)
                     else:
                         logger.warning("scene_list missing, falling back to FULL_RETRY")
@@ -341,6 +361,23 @@ class ChapterCrew:
                         result = self._run_full_pipeline(inputs, state)
 
                 elif state.last_retry_level == RetryLevel.EDIT_ONLY.value:
+                    # Add draft_text_for_edit for selective retry
+                    # [DIAGNOSTIC] Log state before EDIT_ONLY retry
+                    logger.info(f"[DIAGNOSTIC] EDIT_ONLY: state.draft_text exists={hasattr(state, 'draft_text')}, length={len(state.draft_text) if hasattr(state, 'draft_text') and state.draft_text else 0}")
+                    logger.info(f"[DIAGNOSTIC] EDIT_ONLY: state.scene_list exists={hasattr(state, 'scene_list')}, length={len(state.scene_list) if hasattr(state, 'scene_list') and state.scene_list else 0}")
+
+                    if hasattr(state, 'draft_text') and state.draft_text:
+                        inputs["draft_text_for_edit"] = state.draft_text
+                        logger.info(f"[DIAGNOSTIC] EDIT_ONLY: Set inputs['draft_text_for_edit'], length={len(inputs['draft_text_for_edit'])}")
+                    else:
+                        logger.warning("[DIAGNOSTIC] EDIT_ONLY: state.draft_text is None or empty, NOT setting inputs['draft_text_for_edit']")
+
+                    if hasattr(state, 'scene_list') and state.scene_list:
+                        inputs["scene_list"] = state.scene_list
+                        logger.info(f"[DIAGNOSTIC] EDIT_ONLY: Set inputs['scene_list'], length={len(inputs['scene_list'])}")
+                    else:
+                        logger.warning("[DIAGNOSTIC] EDIT_ONLY: state.scene_list is None or empty, NOT setting inputs['scene_list']")
+
                     result = self._run_edit_retry(inputs, state)
 
                 else:
@@ -424,7 +461,22 @@ class ChapterCrew:
                     logger.error(f"Chapter {chapter_number} failed after {attempt + 1} attempts: {error_type}: {error_msg[:100]}")
                     raise
 
-                logger.warning(f"Chapter {chapter_number} attempt {attempt + 1} failed with {error_type}: {error_msg[:100]}, retrying...")
+                # === Smart retry with intelligent delays ===
+                import time
+
+                if "RateLimitError" in error_type or "rate limit" in error_msg.lower():
+                    # TPM rate limit: wait 60 seconds for limit to reset
+                    delay = 60
+                    logger.warning(f"Chapter {chapter_number} hit TPM rate limit, waiting {delay}s before retry {attempt + 2}/{self.max_retries + 1}...")
+                    print(f"⏳ TPM rate limit hit, waiting {delay}s before retry...")
+                    time.sleep(delay)
+                else:
+                    # Other errors: exponential backoff delay
+                    delay = min(5 * (2 ** attempt), 30)  # 5s, 10s, 20s, 30s max
+                    logger.warning(f"Chapter {chapter_number} attempt {attempt + 1} failed with {error_type}: {error_msg[:100]}, retrying in {delay}s...")
+                    print(f"⏳ Retrying in {delay}s...")
+                    time.sleep(delay)
+
                 inputs["revision_instructions"] = ""
                 continue
 
