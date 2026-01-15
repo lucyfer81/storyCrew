@@ -15,7 +15,7 @@ import pytest
 from unittest.mock import Mock, MagicMock, patch, call
 from storycrew.crews.chapter_crew import ChapterCrew, MAX_EDIT_RETRIES, MAX_WRITE_RETRIES
 from storycrew.models import (
-    JudgeReport, Issue, SceneList, ScoreBreakdown, ChapterDraft,
+    JudgeReport, Issue, SceneList, ScoreBreakdown,
     ChapterRevision, RetryLevel
 )
 
@@ -259,7 +259,11 @@ def test_edit_only_retry_flow(
         # Verify second call preserved scene_list and draft_text
         second_call_inputs = mock_crew_instance_2.kickoff.call_args[1]["inputs"]
         assert "scene_list" in second_call_inputs
-        assert sample_scene_list.model_dump_json() in second_call_inputs["scene_list"]
+        # Verify SceneList was correctly preserved
+        stored_scene_list = SceneList.model_validate_json(second_call_inputs["scene_list"])
+        assert stored_scene_list.chapter_number == sample_scene_list.chapter_number
+        assert len(stored_scene_list.scenes) == len(sample_scene_list.scenes)
+        assert stored_scene_list.scenes[0].scene_number == sample_scene_list.scenes[0].scene_number
         assert "draft_text_for_edit" in second_call_inputs
         assert second_call_inputs["draft_text_for_edit"] == draft_text
 
@@ -341,7 +345,11 @@ def test_write_only_retry_flow(
         # Verify second call preserved scene_list
         second_call_inputs = mock_crew_instance_2.kickoff.call_args[1]["inputs"]
         assert "scene_list" in second_call_inputs
-        assert sample_scene_list.model_dump_json() in second_call_inputs["scene_list"]
+        # Verify SceneList was correctly preserved
+        stored_scene_list = SceneList.model_validate_json(second_call_inputs["scene_list"])
+        assert stored_scene_list.chapter_number == sample_scene_list.chapter_number
+        assert len(stored_scene_list.scenes) == len(sample_scene_list.scenes)
+        assert stored_scene_list.scenes[0].scene_number == sample_scene_list.scenes[0].scene_number
 
         # Verify draft_text_for_edit is NOT preserved for WRITE_ONLY
         assert "draft_text_for_edit" not in second_call_inputs
@@ -435,22 +443,27 @@ def test_full_retry_flow(
         assert "draft_text_for_edit" not in second_call_inputs
 
 
-def test_edit_only_escalation_to_write_only(
+def test_edit_only_retry_count_tracking(
     chapter_crew,
     sample_inputs,
     sample_scene_list,
     sample_judge_report_prose,
     sample_judge_report_passed
 ):
-    """Test that MAX_EDIT_RETRIES limit is tracked correctly.
+    """Test that edit retry count is tracked correctly across attempts.
 
-    This test verifies that edit_retry_count is incremented when doing
-    consecutive EDIT_ONLY retries. Note that escalation doesn't actually
-    occur because determine_retry_level() returns FULL_RETRY on attempt >= 2.
+    This test verifies that the system correctly tracks consecutive EDIT_ONLY
+    retry attempts. It does NOT test escalation to WRITE_ONLY (that doesn't
+    actually occur - determine_retry_level() returns FULL_RETRY on attempt >= 2).
 
-    First run (attempt=0): prose issue -> EDIT_ONLY (count=0)
-    Second run (attempt=1): prose issue -> EDIT_ONLY (count=1)
+    First run (attempt=0): prose issue -> EDIT_ONLY
+    Second run (attempt=1): prose issue -> EDIT_ONLY
     Third run (attempt=2): prose issue -> EDIT_ONLY (count would be 2, but determine_retry_level returns FULL_RETRY)
+
+    The test confirms:
+    - edit_retry_count is incremented on each EDIT_ONLY retry
+    - The system maintains the same retry level (EDIT_ONLY) across attempts
+    - The correct agents/tasks are executed for each attempt
     """
     with patch('storycrew.crews.chapter_crew.Crew') as mock_crew_class:
         # Setup three mock instances

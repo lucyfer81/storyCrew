@@ -3,6 +3,7 @@
 
 # But include these specific files and directories
 !src/
+!tests/
 !docs/
 !pyproject.toml
 !README.md
