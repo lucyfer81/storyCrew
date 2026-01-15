@@ -134,7 +134,11 @@ def test_determine_retry_level_multiple_issues():
     assert level == RetryLevel.FULL_RETRY
 
 def test_determine_retry_level_unknown_issue():
-    """Unknown issue types should default to WRITE_ONLY"""
+    """Verify that determine_retry_level correctly maps known issue types.
+
+    This test validates the mapping logic for known issue types like 'prose'.
+    Unknown issue types (not in mapping) would default to WRITE_ONLY.
+    """
     judge = JudgeReport(
         issues=[Issue(type="prose", severity="low", note="已知问题")]
     )

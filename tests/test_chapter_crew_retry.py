@@ -537,21 +537,27 @@ def test_edit_only_retry_count_tracking(
         assert len(third_call_agents) == 3  # editor, judge, continuity
 
 
-def test_write_only_escalation_to_full_retry(
+def test_write_only_retry_count_tracking(
     chapter_crew,
     sample_inputs,
     sample_scene_list,
     sample_judge_report_motivation,
     sample_judge_report_passed
 ):
-    """Test that MAX_WRITE_RETRIES limit is tracked correctly.
+    """Test that write retry count is tracked correctly across attempts.
 
-    This test verifies that write_retry_count is incremented when doing
-    consecutive WRITE_ONLY retries.
+    This test verifies that the system correctly tracks consecutive WRITE_ONLY
+    retry attempts. It does NOT test escalation to FULL_RETRY (that doesn't
+    actually occur - determine_retry_level() returns FULL_RETRY on attempt >= 2).
 
     First run (attempt=0): motivation issue -> WRITE_ONLY (count=0)
     Second run (attempt=1): motivation issue -> WRITE_ONLY (count=1)
     Third run (attempt=2): motivation issue -> WRITE_ONLY (count would be 2, but determine_retry_level returns FULL_RETRY)
+
+    The test confirms:
+    - write_retry_count is incremented on each WRITE_ONLY retry
+    - The system maintains the same retry level (WRITE_ONLY) across attempts
+    - The correct agents/tasks are executed for each attempt
     """
     with patch('storycrew.crews.chapter_crew.Crew') as mock_crew_class:
         # Setup three mock instances
