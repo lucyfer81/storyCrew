@@ -19,6 +19,7 @@ def repair_json(json_str: str) -> str:
     - Trailing commas
     - Single quotes instead of double
     - Invalid escape sequences
+    - Trailing characters after JSON (markdown, comments, etc.)
     - And many other JSON formatting issues
 
     Returns:
@@ -29,10 +30,58 @@ def repair_json(json_str: str) -> str:
 
     try:
         from json_repair import repair_json as lib_repair_json
+        import re
 
         original = json_str
-        # Use the json_repair library to fix common LLM JSON mistakes
-        repaired = lib_repair_json(json_str, skip_json_loads=True)
+
+        # Step 1: Remove common trailing content that LLMs add after JSON
+        # This includes markdown code blocks, comments, explanatory text, etc.
+
+        # Find the first complete JSON object by counting braces
+        cleaned = json_str
+        brace_count = 0
+        in_string = False
+        escape_next = False
+        last_valid_pos = 0
+
+        for i, char in enumerate(cleaned):
+            if escape_next:
+                escape_next = False
+                continue
+
+            if char == '\\':
+                escape_next = True
+                continue
+
+            if char == '"' and not escape_next:
+                in_string = not in_string
+                continue
+
+            if not in_string:
+                if char == '{':
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
+                    # When we return to brace_count=0, we've found a complete JSON object
+                    if brace_count == 0:
+                        # Try to parse up to this position
+                        try:
+                            import json
+                            test_parse = cleaned[:i+1]
+                            json.loads(test_parse)  # Verify it's valid JSON
+                            last_valid_pos = i + 1
+                            logger.info(f"[JSON REPAIR] Found complete JSON object at position {last_valid_pos}")
+                        except json.JSONDecodeError:
+                            # Not valid JSON yet, keep looking
+                            pass
+
+        # If we found a complete JSON object, truncate everything after it
+        if last_valid_pos > 0 and last_valid_pos < len(cleaned):
+            cleaned = cleaned[:last_valid_pos]
+            logger.info(f"[JSON REPAIR] Removed trailing content after JSON (removed {len(json_str) - last_valid_pos} chars)")
+
+        # Step 2: Use the json_repair library to fix common LLM JSON mistakes
+        repaired = lib_repair_json(cleaned, skip_json_loads=True)
 
         if repaired != original:
             logger.info("[JSON REPAIR] Applied repairs using json_repair library")
@@ -48,10 +97,15 @@ def repair_json(json_str: str) -> str:
 
 # Simple interceptor to log LLM responses for debugging
 class LoggingInterceptor:
-    """Intercepts LLM responses to log raw output for debugging."""
+    """Intercepts LLM responses to log raw output and token usage for debugging."""
 
     def __init__(self):
         self.request_count = 0
+        self.llm_instance = None  # Will be set to track token usage
+
+    def set_llm(self, llm_instance):
+        """Set the LLM instance to track token usage."""
+        self.llm_instance = llm_instance
 
     def __call__(self, request, response):
         """Called by CrewAI after each LLM request/response."""
@@ -62,13 +116,48 @@ class LoggingInterceptor:
         logger.info(f"[LLM INTERCEPTOR] Request Method: {request.method}")
         logger.info(f"[LLM INTERCEPTOR] Response Status: {response.status_code}")
 
+        # Try to extract and log token usage from response
+        try:
+            if hasattr(response, 'headers'):
+                # Some APIs include token usage in headers (like OpenAI)
+                logger.info(f"[LLM INTERCEPTOR] Response Headers: {dict(response.headers)}")
+
+            # Try to parse JSON response for usage field
+            if hasattr(response, 'text'):
+                import json
+                try:
+                    response_json = json.loads(response.text)
+                    if 'usage' in response_json:
+                        usage = response_json['usage']
+                        prompt_tokens = usage.get('prompt_tokens', usage.get('input_tokens', 0))
+                        completion_tokens = usage.get('completion_tokens', usage.get('output_tokens', 0))
+                        total_tokens = usage.get('total_tokens', prompt_tokens + completion_tokens)
+
+                        logger.info(f"[LLM TOKENS] 📊 Token Usage:")
+                        logger.info(f"[LLM TOKENS]   Input (prompt):  {prompt_tokens:,} tokens")
+                        logger.info(f"[LLM TOKENS]   Output (completion): {completion_tokens:,} tokens")
+                        logger.info(f"[LLM TOKENS]   Total: {total_tokens:,} tokens")
+
+                        # Calculate cost estimate (rough estimate: $0.50 per 1M tokens)
+                        input_cost = (prompt_tokens / 1_000_000) * 0.50
+                        output_cost = (completion_tokens / 1_000_000) * 1.50
+                        total_cost = input_cost + output_cost
+                        logger.info(f"[LLM TOKENS]   Est. Cost: ${total_cost:.4f}")
+                except json.JSONDecodeError:
+                    pass  # Response is not JSON, skip parsing
+
+        except Exception as e:
+            logger.debug(f"[LLM INTERCEPTOR] Could not extract token usage: {e}")
+
         # Try to get the response content
         try:
             if hasattr(response, 'text'):
-                logger.info(f"[LLM INTERCEPTOR] Response Text (first 2000 chars): {response.text[:2000]}")
+                content_preview = response.text[:500]
+                logger.info(f"[LLM INTERCEPTOR] Response Text (first 500 chars): {content_preview}")
             elif hasattr(response, 'content'):
                 content = response.content.decode('utf-8', errors='ignore')
-                logger.info(f"[LLM INTERCEPTOR] Response Content (first 2000 chars): {content[:2000]}")
+                content_preview = content[:500]
+                logger.info(f"[LLM INTERCEPTOR] Response Content (first 500 chars): {content_preview}")
         except Exception as e:
             logger.info(f"[LLM INTERCEPTOR] Could not extract response content: {e}")
 
@@ -114,8 +203,8 @@ def get_llm():
             model=llm_model,
             api_key=api_key,
             base_url=base_url,
-            max_tokens=65536,  # 64K tokens - DeepSeek-V3.1 supports up to 163K output
-            max_completion_tokens=65536,  # Alternative token limit parameter
+            max_tokens=65536,  # Set both for compatibility
+            max_completion_tokens=65536,  # Set both for compatibility
             temperature=0.0,  # Make output more deterministic
             timeout=1800,  # 30 minutes - accommodate complex chapters (6-9) with validation overhead
             interceptor=interceptor  # Add logging interceptor
@@ -142,8 +231,8 @@ def get_outline_llm():
             model=llm_model,
             api_key=api_key,
             base_url=base_url,
-            max_tokens=65536,  # 64K tokens - DeepSeek-V3.1 supports up to 163K output
-            max_completion_tokens=65536,  # Alternative token limit parameter
+            max_tokens=65536,  # Set both for compatibility
+            max_completion_tokens=65536,  # Set both for compatibility
             temperature=0.0,  # Make output more deterministic
             timeout=1800  # 30 minutes - accommodate long outline generation
         )
@@ -168,8 +257,8 @@ def get_llm_by_env(env_var_name: str, default: str = "gpt-4o-mini"):
             model=llm_model,
             api_key=api_key,
             base_url=base_url,
-            max_tokens=65536,  # 64K tokens - DeepSeek-V3.1 supports up to 163K output
-            max_completion_tokens=65536,  # Alternative token limit parameter
+            max_tokens=65536,  # Set both for compatibility
+            max_completion_tokens=65536,  # Set both for compatibility
             temperature=0.0,  # Make output more deterministic
             timeout=1800  # 30 minutes - accommodate complex chapter generation
         )
