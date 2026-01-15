@@ -194,9 +194,9 @@ class ChapterCrew:
         outputs = result.tasks_output
 
         # 根据 retry_level 决定如何解析
-        if state.last_retry_level == RetryLevel.EDIT_ONLY.value or state.current_attempt == 0:
+        if state.current_attempt == 0 or state.last_retry_level in (None, RetryLevel.FULL_RETRY.value):
             # FULL_RETRY 或第一次：有 5 个输出
-            if len(outputs) >= 3:
+            if len(outputs) >= 5:
                 # outputs[0] = scene_list (plan_chapter)
                 # outputs[1] = draft_text (write_chapter)
                 # outputs[2] = revision_text (edit_chapter)
@@ -225,7 +225,7 @@ class ChapterCrew:
 
         elif state.last_retry_level == RetryLevel.WRITE_ONLY.value:
             # WRITE_ONLY：有 4 个输出（write, edit, judge, update_bible）
-            if len(outputs) >= 3:
+            if len(outputs) >= 4:
                 # outputs[0] = draft_text (write_chapter)
                 # outputs[1] = revision_text (edit_chapter)
                 # outputs[2] = judge (judge_chapter)
@@ -249,7 +249,7 @@ class ChapterCrew:
 
         elif state.last_retry_level == RetryLevel.EDIT_ONLY.value:
             # EDIT_ONLY：有 3 个输出（edit, judge, update_bible）
-            if len(outputs) >= 1:
+            if len(outputs) >= 3:
                 # outputs[0] = revision_text (edit_chapter)
                 # outputs[1] = judge (judge_chapter)
                 # outputs[2] = updated_bible (update_bible)
