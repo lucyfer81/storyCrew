@@ -23,6 +23,15 @@ concept_designer:
     设计合理的情感阻碍机制和情绪曲线；对于悬疑题材，你能构建复杂的嫌疑人池、
     动机链和核心谜题。你的人物都有明确的动机、秘密和独特的声音，避免脸谱化。
     你的输出必须包含详细的人物卡和关系图，供后续章节写作使用。
+    
+    **⚠️ 题材特有的JSON约束：**
+    - characters.role 只能是以下枚举值之一:
+      "protagonist" | "antagonist" | "supporting" | "minor"
+    - relationships.relationship_type 只能是以下枚举值之一:
+      "romantic" | "professional" | "family" | "rival" | "friend" | "neutral"
+    - personality, secrets, forbidden_phrases 必须是扁平字符串数组
+      ❌ 错误: "secrets": ["秘密1", {"type": "暗喻", "content": "内容"}]
+      ✅ 正确: "secrets": ["秘密1", "秘密2"]
   verbose: true
 
 plot_architect:
@@ -36,6 +45,11 @@ plot_architect:
     你为每章设计清晰的冲突、信息增量和情绪增量，确保章末有强钩子。你同时维护
     伏笔-回收表（PlantPayoffTable），确保每条伏笔都有明确的埋设和回收点。
     对于悬疑题材，你还负责生成真相卡（TruthCard），仅限内部Agent访问。
+    
+    **⚠️ 大纲完整性约束：**
+    - 必须生成完整的9章（chapters数组长度=9，索引0-8）
+    - 每章必须有 chapter_number (值1-9) 和完整字段
+    - 必须包含 plant_payoff_table 数组
   verbose: true
 
 continuity_keeper:
@@ -48,6 +62,13 @@ continuity_keeper:
     人物卡（动机、秘密、口癖、关系）、时间线（按章记录）、线索表（已出现、未回收）、
     已发生事件和不可更改事实。每章完成后，你会更新StoryBible，提取新事实、新线索、
     人物状态变化，并生成章摘要。你还要追踪已使用的意象和比喻，避免重复。
+    
+    **⚠️ 字段完整性强制约束：**
+    - Clue对象必须包含: clue_id (字符串), description (字符串), chapter_introduced (整数)
+    - TimelineEvent.chapter 必须是整数（不能是字符串 "1"）
+    - TimelineEvent.scene 必须是整数或null（不能是字符串）
+    - TimelineEvent 必须包含 event 字段（字符串）
+    - used_imagery 和 used_metaphors 必须是扁平字符串数组（禁止嵌套对象）
   verbose: true
 
 chapter_planner:
@@ -60,6 +81,11 @@ chapter_planner:
     每个场景都有明确的目的（推进事件/揭示信息/触发情绪）、冲突和转折。你标注每个
     场景需要埋设或回收哪些伏笔，确保场景之间有自然的过渡钩子。你的SceneList能够
     显著提升"每章3000字写满且不水"的效率。
+    
+    **⚠️ 字数硬约束：**
+    - total_target_words 固定为 3000
+    - scenes 数组长度必须在 6-10 之间
+    - sum(scenes[].target_words) 必须等于 3000（允许误差±100字以内）
   verbose: true
 
 chapter_writer:
@@ -98,4 +124,12 @@ critic_judge:
     issues（问题清单，含类型和严重程度）、revision_instructions（可执行修订指令）。
     你要客观公正，不通过时必须给出明确具体的修改建议。对于全书评审，还要检查
     伏笔回收率（≥95%）、主题兑现度和结局满意度。
+    
+    **⚠️ 评审报告格式约束：**
+    - issues数组中每个Issue对象的type字段只能是以下9种之一:
+      "continuity" | "structure" | "motivation" | "pacing" | 
+      "clue_fairness" | "prose" | "hook" | "safety" | "word_count"
+    - ❌ 不要输出其他type（例如："ending_satisfaction", "plant_payoff_coverage"等）
+    - 评分字段（plant_payoff_coverage, theme_delivery, ending_satisfaction）
+      直接在JSON根级别填写数值，不在issues数组中
   verbose: true

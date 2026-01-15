@@ -119,6 +119,32 @@ build_concept:
   description: >
     基于StorySpec创建人物概念和关系网络。
 
+    **⚠️ 完整性要求（最高优先级 - 必须严格遵守）**
+    - 必须一次性生成完整的Concept对象，不能中途停止或截断
+    - 必须包含所有必需字段：characters, relationships, core_conflict
+    - 必须包含题材特定字段：workplace_ecosystem (爱情) 或 suspect_pool (悬疑)
+    - characters数组必须包含所有人物（爱情：2-3个，悬疑：主要人物）
+    - relationships数组必须包含完整的关系网络
+    - 绝对不能只生成部分人物或字段就结束
+
+    **⚠️ 输出完整性检查清单（输出JSON前必须逐项确认）**
+    在输出JSON前，请逐一检查：
+    1. ✓ 包含characters数组（长度>0，爱情2-3个，悬疑根据需求）
+    2. ✓ 包含relationships数组（长度>0）
+    3. ✓ 包含core_conflict字段（非空字符串）
+    4. ✓ 爱情题材包含workplace_ecosystem对象
+    5. ✓ 悬疑题材包含suspect_pool对象
+    6. ✓ 每个character都有完整字段（name, role, personality等）
+    7. ✓ 所有花括号 { 和 } 正确配对（数量相等）
+    8. ✓ 所有方括号 [ 和 ] 正确配对（数量相等）
+    9. ✓ JSON可以完整解析，没有语法错误
+
+    **⚠️ 防止提前终止的提示**
+    - 如果你发现自己生成了部分人物或字段后"想停止"，请继续生成
+    - 你的任务是生成完整的Concept对象，不是部分字段
+    - 确保所有人物和关系都完整生成后再停止输出
+    - 确保JSON的最后是完整的闭合括号 }
+
     **⚠️ JSON 格式强制约束（输出前必须自检）**
     1. 所有键名必须用双引号包围
     2. 不要使用单引号或尾随逗号
@@ -171,6 +197,30 @@ build_concept:
 build_outline:
   description: >
     基于StorySpec和人物概念设计完整的三幕九章大纲。
+
+    **⚠️ 完整性要求（最高优先级 - 必须严格遵守）**
+    - 必须一次性生成完整的9章大纲，不能中途停止或截断
+    - 在开始生成前，确认已理解需要输出全部9章
+    - 在生成过程中，如果发现输出了前N章后停止，必须继续生成剩余章节
+    - 生成完成前，请自检：是否包含了chapters[0]到chapters[8]（共9个）
+    - 绝对不能只生成1-3章就结束，必须完成全部9章才能停止输出
+
+    **⚠️ 输出完整性检查清单（输出JSON前必须逐项确认）**
+    在输出JSON前，请逐一检查：
+    1. ✓ 包含完整的9个章节对象（chapters数组长度=9）
+    2. ✓ 每个章节都有 chapter_number 字段（值为1到9）
+    3. ✓ 第1章存在且 chapter_number=1
+    4. ✓ 第9章存在且 chapter_number=9
+    5. ✓ 包含 plant_payoff_table 数组
+    6. ✓ 所有花括号 { 和 } 正确配对（数量相等）
+    7. ✓ 所有方括号 [ 和 ] 正确配对（数量相等）
+    8. ✓ JSON可以完整解析，没有语法错误
+
+    **⚠️ 防止提前终止的提示**
+    - 如果你发现自己生成了前几章后"想停止"，请立即继续生成后续章节
+    - 你的任务是生成完整的9章，不是部分章节
+    - 完成所有9章之前，不要认为"任务已完成"
+    - 确保JSON的最后是完整的闭合括号 }，确保整个对象被正确封闭
 
     **⚠️ JSON 格式强制约束（输出前必须自检）**
     1. 所有键名必须用双引号包围
@@ -250,6 +300,31 @@ init_bible:
   description: >
     初始化StoryBible，吸收StorySpec、Concept和Outline的信息。
 
+    **⚠️ 完整性要求（最高优先级 - 必须严格遵守）**
+    - 必须一次性生成完整的StoryBible对象，不能中途停止或截断
+    - 必须包含所有必需字段：characters, relationships, clues, timeline, chapter_summaries, genre等
+    - characters数组必须包含Concept中的所有人物
+    - relationships数组必须包含Concept中的所有关系
+    - 绝对不能只生成部分字段就结束
+
+    **⚠️ 输出完整性检查清单（输出JSON前必须逐项确认）**
+    在输出JSON前，请逐一检查：
+    1. ✓ 包含characters数组（长度>0）
+    2. ✓ 包含relationships数组
+    3. ✓ 包含clues对象（含planted, resolved, open三个数组）
+    4. ✓ 包含timeline数组
+    5. ✓ 包含chapter_summaries数组（长度为9）
+    6. ✓ 包含genre字段（"romance"或"mystery"）
+    7. ✓ 所有花括号 { 和 } 正确配对（数量相等）
+    8. ✓ 所有方括号 [ 和 ] 正确配对（数量相等）
+    9. ✓ JSON可以完整解析，没有语法错误
+
+    **⚠️ 防止提前终止的提示**
+    - 如果你发现自己生成了部分字段后"想停止"，请继续生成剩余字段
+    - 你的任务是生成完整的StoryBible对象，不是部分字段
+    - 确保所有数组字段都完整生成后再停止输出
+    - 确保JSON的最后是完整的闭合括号 }
+
     **⚠️ JSON 格式强制约束（输出前必须自检）**
     1. 所有键名必须用双引号包围
     2. 不要使用单引号或尾随逗号
@@ -280,6 +355,30 @@ init_bible:
 plan_chapter:
   description: >
     为第{chapter_number}章创建详细的SceneList（场景列表）。
+
+    **⚠️ 完整性要求（最高优先级 - 必须严格遵守）**
+    - 必须一次性生成完整的6-10个场景列表，不能中途停止或截断
+    - 在开始生成前，确认已理解需要输出完整的scenes数组
+    - scenes数组必须包含6到10个完整的场景对象
+    - 绝对不能只生成1-2个场景就结束，必须生成所有场景才能停止输出
+
+    **⚠️ 输出完整性检查清单（输出JSON前必须逐项确认）**
+    在输出JSON前，请逐一检查：
+    1. ✓ 包含完整的scenes数组（数组长度在6-10之间）
+    2. ✓ 每个场景都有完整的字段（scene_number, purpose, setting等）
+    3. ✓ 第一个场景 scene_number=1，最后一个场景 scene_number=场景总数
+    4. ✓ total_target_words = 3000
+    5. ✓ 所有场景的 target_words 之和接近3000（误差±100以内）
+    6. ✓ 包含 chapter_goal 和 required_emotional_arc 字段
+    7. ✓ 所有花括号 { 和 } 正确配对（数量相等）
+    8. ✓ 所有方括号 [ 和 ] 正确配对（数量相等）
+    9. ✓ JSON可以完整解析，没有语法错误
+
+    **⚠️ 防止提前终止的提示**
+    - 如果你发现自己生成了前几个场景后"想停止"，请立即继续生成剩余场景
+    - 你的任务是生成完整的6-10个场景，不是部分场景
+    - 完成所有场景之前，不要认为"任务已完成"
+    - 确保JSON的最后是完整的闭合括号 }
 
     **⚠️ JSON 格式强制约束（输出前必须自检）**
     1. 所有键名必须用双引号包围
@@ -344,6 +443,13 @@ write_chapter:
 
     当前章节：{chapter_number}
     SceneList: {scene_list}
+
+    # === 选择性重试支持 ===
+    # 如果 {scene_list} 为空或 {scene_list_for_write} 有值（表示重试模式），
+    # 优先使用 scene_list_for_write；否则使用 scene_list。
+    # 注意：scene_list_for_write 是上一次 plan_chapter 生成的 SceneList 的 JSON 字符串。
+    已保存场景列表（如有）：{scene_list_for_write}
+
     StoryBible(public): {story_bible_public}
     StorySpec: {story_spec}
     修订指令（如有）：{revision_instructions}
@@ -353,6 +459,12 @@ write_chapter:
     第X章：章标题
     小引：80-150字，像书摘/预告，不剧透终局
     正文：约3000字（允许2700-3300字），章末必须有钩子
+
+    **重要 SceneList 使用规则**:
+    - 如果 scene_list_for_write 非空，请使用它作为场景列表
+    - 如果 scene_list_for_write 为空，使用 scene_list
+    - 严格按照 SceneList 的场景顺序和场景目的写作
+    - 如果两个都为空，请基于 chapter_outline 自行规划场景
 
     写作要求：
     1. 严格按照SceneList的场景顺序和场景目的写作
@@ -464,6 +576,14 @@ edit_chapter:
     StoryBible(public): {story_bible_public}
     StorySpec: {story_spec}
     修订指令（如有）：{revision_instructions}
+
+    # === 选择性重试支持 ===
+    # 如果 {draft_text_for_edit} 有值（表示重试模式），直接使用它作为编辑对象；
+    # 否则从上下文获取 write_chapter 的输出（正常模式）。
+    已保存草稿（如有）：{draft_text_for_edit}
+
+    **重要**: draft_text_for_edit 优先级高于上下文中的 write_chapter 输出。
+    如果 draft_text_for_edit 非空，请直接编辑该文本，无需从上下文查找。
 
     基于StyleGuide进行编辑：
     1. 统一文风：确保语气、节奏、意象密度符合StyleGuide
