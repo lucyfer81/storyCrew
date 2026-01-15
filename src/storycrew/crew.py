@@ -1,6 +1,8 @@
 """Base crew configuration for StoryCrew."""
 import os
 import logging
+from pathlib import Path
+import yaml
 from dotenv import load_dotenv
 from crewai import Agent, Crew, Process, Task, LLM
 from crewai.project import CrewBase, agent, crew, task
@@ -8,6 +10,58 @@ from crewai.agents.agent_builder.base_agent import BaseAgent
 from typing import List, Dict, Any
 
 logger = logging.getLogger("StoryCrew")
+
+# ==================== JSON RULES INJECTION ====================
+# This function injects universal JSON rules into the tasks config at import time
+def _inject_json_rules_at_import_time():
+    """
+    Inject universal JSON format rules into tasks.yaml at module import time.
+    This ensures all task descriptions have the JSON rules before CrewAI loads them.
+    """
+    rules_path = Path(__file__).parent / "config" / "json_format_rules.yaml"
+    tasks_path = Path(__file__).parent / "config" / "tasks.yaml"
+    
+    if not rules_path.exists():
+        logger.warning(f"[JSON RULES] Rules file not found: {rules_path}")
+        return
+    
+    if not tasks_path.exists():
+        logger.warning(f"[JSON RULES] Tasks file not found: {tasks_path}")
+        return
+    
+    try:
+        # Load the rules
+        with open(rules_path, 'r', encoding='utf-8') as f:
+            rules_config = yaml.safe_load(f)
+        universal_rules = rules_config['universal_rules']
+        
+        # Load the tasks
+        with open(tasks_path, 'r', encoding='utf-8') as f:
+            tasks_data = yaml.safe_load(f)
+        
+        # Inject rules into task descriptions
+        injection_count = 0
+        for task_name, task_config in tasks_data.items():
+            description = task_config.get('description', '')
+            if '{UNIVERSAL_JSON_RULES}' in description:
+                task_config['description'] = description.replace(
+                    '{UNIVERSAL_JSON_RULES}',
+                    universal_rules
+                )
+                injection_count += 1
+        
+        # Write back to tasks.yaml (in-place modification)
+        with open(tasks_path, 'w', encoding='utf-8') as f:
+            yaml.safe_dump(tasks_data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+        
+        logger.info(f"[JSON RULES INJECTION] Successfully injected universal rules into {injection_count} tasks")
+        
+    except Exception as e:
+        logger.error(f"[JSON RULES INJECTION] Failed to inject rules: {e}")
+
+# Inject rules at module import time
+_inject_json_rules_at_import_time()
+# ==================== END JSON RULES INJECTION ====================
 
 
 def repair_json(json_str: str) -> str:
