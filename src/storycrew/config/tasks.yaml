@@ -232,34 +232,23 @@ judge_chapter:
     \ continuity (连续性)：是否有与StoryBible矛盾的地方 2. pacing (节奏)：节奏是否合适，有无拖沓 3. character_motivation\
     \ (人物动机)：人物行为是否合理，动机是否清晰 4. genre_fulfillment (类型满足度)：是否符合爱情/悬疑题材的要求 5. prose\
     \ (文笔)：文笔是否通顺、有感染力 6. hook (钩子)：章末是否有强钩子 7. clue_fairness (悬疑专属)：线索是否公平，读者能否合理推理\n\
-    **字数评审标准（分级处理）**:\n\
-    使用 count_chinese_words() 统计章节正文的有效字数（汉字+英文单词，排除空白标点）。\n\
-    1. 字数不足 (< 2700字):\n\
-       - type: \"word_count\"\n\
-       - severity: \"major\"\n\
-       - action: \"扩写\"\n\
-       - 指令：增加场景细节、人物对话、环境描写，将字数扩充至2700-3300字\n\
-    2. 字数超标 (> 3300字):\n\
-       - type: \"word_count\"\n\
-       - severity: \"moderate\"\n\
-       - action: \"精简\"\n\
-       - 指令：删减冗余描写、重复对话，将字数压缩至2700-3300字\n\
-    3. 字数合理 (2700-3300字):\n\
-       - 不需要 word_count issue\n\
-    **注意**：字数问题通过 issues 数组处理，不再是 hard_fail。\n\
+    **字数评审标准（分级处理）**:\n使用 count_chinese_words() 统计章节正文的有效字数（汉字+英文单词，排除空白标点）。\n1. 字数不足\
+    \ (< 2700字):\n- type: \"word_count\"\n- severity: \"major\"\n- action: \"扩写\"\n\
+    - 指令：增加场景细节、人物对话、环境描写，将字数扩充至2700-3300字\n2. 字数超标 (> 3300字):\n- type: \"word_count\"\
+    \n- severity: \"moderate\"\n- action: \"精简\"\n- 指令：删减冗余描写、重复对话，将字数压缩至2700-3300字\n\
+    3. 字数合理 (2700-3300字):\n- 不需要 word_count issue\n**注意**：字数问题通过 issues 数组处理，不再是 hard_fail。\n\
     硬性检查： 1. safety_pass: 是否通过安全合规检查（无违规内容） 2. continuity_conflicts: 连续性矛盾列表（如果有）\n\
-    通过标准： - 爱情题材：character_motivation\
-    \ >= 7 AND pacing >= 7 AND hook >= 7 AND genre_fulfillment >= 7 - 悬疑题材：上述条件 AND\
-    \ clue_fairness >= 7 - 硬性：safety_pass = true AND continuity_conflicts为空\n如果不通过，必须提供： 1. issues: 问题列表，每个问题包含type（类型）、severity（严重程度）、note（说明） 2.\
-    \ revision_instructions: 可执行的修订指令列表\n输出必须是严格的JSON格式。\n"
+    通过标准： - 爱情题材：character_motivation >= 7 AND pacing >= 7 AND hook >= 7 AND genre_fulfillment\
+    \ >= 7 - 悬疑题材：上述条件 AND clue_fairness >= 7 - 硬性：safety_pass = true AND continuity_conflicts为空\n\
+    如果不通过，必须提供： 1. issues: 问题列表，每个问题包含type（类型）、severity（严重程度）、note（说明） 2. revision_instructions:\
+    \ 可执行的修订指令列表\n输出必须是严格的JSON格式。\n"
   expected_output: "严格JSON格式的JudgeReport对象： {\n  \"chapter\": {chapter_number},\n\
     \  \"word_count\": 实际字数,\n  \"scores\": {\n    \"continuity\": 0-10,\n    \"pacing\"\
     : 0-10,\n    \"character_motivation\": 0-10,\n    \"genre_fulfillment\": 0-10,\n\
     \    \"prose\": 0-10,\n    \"hook\": 0-10,\n    \"clue_fairness\": 0-10 (悬疑)\n\
     \  },\n  \"hard_fail\": {\n    \"safety_pass\": true/false,\n    \"continuity_conflicts\"\
-    : []\n  },\n  \"passed\": true/false,\n\
-    \  \"issues\": [Issue对象数组],\n  \"revision_instructions\": [\"修订指令1\", \"修订指令2\"\
-    ],\n  \"strengths\": [\"优点1\", \"优点2\"]\n}\n不要包含JSON之外的任何文字。\n"
+    : []\n  },\n  \"passed\": true/false,\n  \"issues\": [Issue对象数组],\n  \"revision_instructions\"\
+    : [\"修订指令1\", \"修订指令2\"],\n  \"strengths\": [\"优点1\", \"优点2\"]\n}\n不要包含JSON之外的任何文字。\n"
   agent: critic_judge
 judge_whole_book:
   description: "对全书进行最终评审，检查伏笔回收、主题兑现、连续性。\n⚠️ **JSON 格式强制约束（输出前必须自检）**\n\n**基础格式要求：**\n\
