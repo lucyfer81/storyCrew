@@ -315,23 +315,13 @@ class ChapterCrew:
                     state.scene_list = outputs[0].pydantic.model_dump_json()
 
                 # Extract draft_text
-                if hasattr(outputs[1], 'raw'):
-                    state.draft_text = str(outputs[1].raw)
-                elif hasattr(outputs[1], 'pydantic'):
-                    state.draft_text = outputs[1].pydantic.raw_text
-                else:
-                    state.draft_text = str(outputs[1])
+                state.draft_text = str(outputs[1].raw) if hasattr(outputs[1], 'raw') else str(outputs[1])
 
                 # [DIAGNOSTIC] Log draft_text extraction
                 logger.info(f"[DIAGNOSTIC] FULL_RETRY: Extracted draft_text, length={len(state.draft_text) if state.draft_text else 0}, first_100_chars={state.draft_text[:100] if state.draft_text else 'None'}")
 
                 # Extract revision_text
-                if hasattr(outputs[2], 'raw'):
-                    state.revision_text = str(outputs[2].raw)
-                elif hasattr(outputs[2], 'pydantic'):
-                    state.revision_text = outputs[2].pydantic.revised_text
-                else:
-                    state.revision_text = str(outputs[2])
+                state.revision_text = str(outputs[2].raw) if hasattr(outputs[2], 'raw') else str(outputs[2])
 
         elif state.last_retry_level == RetryLevel.WRITE_ONLY.value:
             # WRITE_ONLY：有 4 个输出（write, edit, judge, update_bible）
@@ -342,23 +332,13 @@ class ChapterCrew:
                 # outputs[3] = updated_bible (update_bible)
 
                 # Extract draft_text
-                if hasattr(outputs[0], 'raw'):
-                    state.draft_text = str(outputs[0].raw)
-                elif hasattr(outputs[0], 'pydantic'):
-                    state.draft_text = outputs[0].pydantic.raw_text
-                else:
-                    state.draft_text = str(outputs[0])
+                state.draft_text = str(outputs[0].raw) if hasattr(outputs[0], 'raw') else str(outputs[0])
 
                 # [DIAGNOSTIC] Log draft_text extraction
                 logger.info(f"[DIAGNOSTIC] WRITE_ONLY: Extracted draft_text, length={len(state.draft_text) if state.draft_text else 0}, first_100_chars={state.draft_text[:100] if state.draft_text else 'None'}")
 
                 # Extract revision_text
-                if hasattr(outputs[1], 'raw'):
-                    state.revision_text = str(outputs[1].raw)
-                elif hasattr(outputs[1], 'pydantic'):
-                    state.revision_text = outputs[1].pydantic.revised_text
-                else:
-                    state.revision_text = str(outputs[1])
+                state.revision_text = str(outputs[1].raw) if hasattr(outputs[1], 'raw') else str(outputs[1])
 
         elif state.last_retry_level == RetryLevel.EDIT_ONLY.value:
             # EDIT_ONLY：有 3 个输出（edit, judge, update_bible）
@@ -368,12 +348,7 @@ class ChapterCrew:
                 # outputs[2] = updated_bible (update_bible)
 
                 # Extract revision_text
-                if hasattr(outputs[0], 'raw'):
-                    state.revision_text = str(outputs[0].raw)
-                elif hasattr(outputs[0], 'pydantic'):
-                    state.revision_text = outputs[0].pydantic.revised_text
-                else:
-                    state.revision_text = str(outputs[0])
+                state.revision_text = str(outputs[0].raw) if hasattr(outputs[0], 'raw') else str(outputs[0])
 
     def generate_chapter(
         self,
