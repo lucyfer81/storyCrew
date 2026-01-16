@@ -222,7 +222,8 @@ class LoggingInterceptor:
 # Import Pydantic models for structured outputs
 from storycrew.models import (
     StorySpec, StorySpecWithResult, Concept, BookOutline, StoryBible,
-    SceneList, ChapterDraft, ChapterRevision, JudgeReport, NovelMetadata
+    SceneList, JudgeReport, NovelMetadata
+    # ChapterDraft, ChapterRevision removed - output_pydantic not enabled
     # FinalBook removed - assemble_book now outputs plain Markdown text
 )
 
