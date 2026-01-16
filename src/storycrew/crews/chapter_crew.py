@@ -38,6 +38,104 @@ class ChapterCrew:
             logger.warning(f"SceneList JSON 解析失败: {e}")
             return None
 
+    def _normalize_scene_list_word_count(self, scene_list: SceneList) -> SceneList:
+        """自动校正 SceneList 的字数分配
+
+        如果 sum(scenes[].target_words) != 3000，按比例缩放所有场景的字数。
+
+        校正策略：
+        1. 检查当前总和与目标3000字的差异
+        2. 计算缩放因子 = 3000 / 当前总和
+        3. 按比例缩放每个场景的 target_words（四舍五入）
+        4. 验证校正后的总和
+
+        Args:
+            scene_list: 原始 SceneList
+
+        Returns:
+            SceneList: 校正后的 SceneList（总和严格为3000）
+        """
+        target_total = 3000
+        tolerance = 100
+
+        current_sum = sum(scene.target_words for scene in scene_list.scenes)
+
+        # 如果在容忍范围内，直接返回
+        if abs(current_sum - target_total) <= tolerance:
+            logger.debug(
+                f"SceneList字数符合要求: {current_sum} "
+                f"(目标{target_total}±{tolerance})"
+            )
+            return scene_list
+
+        # 需要校正
+        logger.warning(
+            f"SceneList字数不符合要求: {current_sum} "
+            f"(目标{target_total}±{tolerance})，开始自动校正..."
+        )
+
+        # 计算缩放比例
+        scale_factor = target_total / current_sum
+
+        # 按比例缩放每个场景的字数
+        corrected_scenes = []
+        for scene in scene_list.scenes:
+            # 缩放并四舍五入
+            new_target = round(scene.target_words * scale_factor)
+
+            # 创建新场景对象（保持其他字段不变）
+            corrected_scene = scene.model_copy(update={'target_words': new_target})
+            corrected_scenes.append(corrected_scene)
+
+        # 验证校正后的总和
+        new_sum = sum(s.target_words for s in corrected_scenes)
+
+        # 由于四舍五入可能导致轻微偏差，需要进行微调
+        # 如果总和不是3000，调整最后一个场景
+        if new_sum != target_total:
+            diff = target_total - new_sum
+            corrected_scenes[-1].target_words += diff
+            new_sum = target_total
+
+        logger.info(
+            f"SceneList自动校正完成: {current_sum} -> {new_sum} "
+            f"(缩放因子: {scale_factor:.4f})"
+        )
+
+        # 记录校正前后的对比
+        logger.debug(f"校正前后场景字数对比:")
+        for i, (old_scene, new_scene) in enumerate(zip(scene_list.scenes, corrected_scenes)):
+            logger.debug(
+                f"  场景{old_scene.scene_number}: "
+                f"{old_scene.target_words} -> {new_scene.target_words}"
+            )
+
+        # 更新 SceneList
+        scene_list.scenes = corrected_scenes
+
+        return scene_list
+
+    def _parse_and_normalize_scene_list(self, scene_list_json: str) -> Optional[SceneList]:
+        """解析并自动校正 SceneList
+
+        结合了解析和字数校正两个步骤。
+
+        Args:
+            scene_list_json: SceneList 的 JSON 字符串
+
+        Returns:
+            Optional[SceneList]: 校正后的 SceneList，解析失败返回 None
+        """
+        # 1. 解析
+        scene_list = self._parse_scene_list_safe(scene_list_json)
+        if scene_list is None:
+            return None
+
+        # 2. 自动校正字数分配
+        normalized_list = self._normalize_scene_list_word_count(scene_list)
+
+        return normalized_list
+
     def _run_full_pipeline(self, inputs: Dict[str, Any], state: ChapterGenerationState) -> Any:
         """运行完整的5个任务链路
 
@@ -345,7 +443,7 @@ class ChapterCrew:
                 elif state.last_retry_level == RetryLevel.WRITE_ONLY.value:
                     # Check if scene_list recovery is needed
                     if "scene_list" in inputs:
-                        scene_list = self._parse_scene_list_safe(inputs["scene_list"])
+                        scene_list = self._parse_and_normalize_scene_list(inputs["scene_list"])
                         if scene_list is None:
                             logger.warning("SceneList recovery failed, falling back to FULL_RETRY")
                             state.last_retry_level = RetryLevel.FULL_RETRY.value
