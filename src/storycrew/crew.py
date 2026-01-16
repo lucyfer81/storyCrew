@@ -151,7 +151,10 @@ def repair_json(json_str: str) -> str:
 
 # Simple interceptor to log LLM responses for debugging
 class LoggingInterceptor:
-    """Intercepts LLM responses to log raw output and token usage for debugging."""
+    """Intercepts LLM responses to log raw output and token usage for debugging.
+
+    Implements CrewAI's BaseInterceptor interface with on_outbound/on_inbound methods.
+    """
 
     def __init__(self):
         self.request_count = 0
@@ -179,14 +182,24 @@ class LoggingInterceptor:
         estimated_tokens = (chinese_chars / 2) + (other_chars / 4)
         return int(estimated_tokens)
 
-    def __call__(self, request, response):
-        """Called by CrewAI after each LLM request/response."""
+    def on_outbound(self, request):
+        """Intercept outbound request before sending to LLM.
+
+        Args:
+            request: httpx.Request object
+
+        Returns:
+            Modified request object (unchanged, only logging)
+        """
         self.request_count += 1
+
+        # Debug: Log when interceptor is called
+        print(f"[DEBUG] LoggingInterceptor.on_outbound invoked - Request #{self.request_count}")
+
         logger.info(f"=" * 80)
         logger.info(f"[LLM INTERCEPTOR] Request #{self.request_count}")
         logger.info(f"[LLM INTERCEPTOR] Request URL: {request.url}")
         logger.info(f"[LLM INTERCEPTOR] Request Method: {request.method}")
-        logger.info(f"[LLM INTERCEPTOR] Response Status: {response.status_code}")
 
         # === Log Request Prompt ===
         try:
@@ -194,10 +207,10 @@ class LoggingInterceptor:
             request_text = None
 
             # Try to get request body
-            if hasattr(request, 'body'):
+            if hasattr(request, 'content'):
+                request_body = request.content
+            elif hasattr(request, 'body'):
                 request_body = request.body
-            elif hasattr(request, 'data'):
-                request_body = request.data
 
             # Try to extract request text
             if request_body:
@@ -268,8 +281,21 @@ class LoggingInterceptor:
         except Exception as e:
             logger.warning(f"[LLM REQUEST] Could not extract request prompt: {e}")
 
+        # Return request unchanged
+        return request
+
+    def on_inbound(self, response):
+        """Intercept inbound response after receiving from LLM.
+
+        Args:
+            response: httpx.Response object
+
+        Returns:
+            Modified response object (unchanged, only logging)
+        """
+        logger.info(f"[LLM INTERCEPTOR] Response Status: {response.status_code}")
+
         # === Log Response Content ===
-        response_json = None
         try:
             if hasattr(response, 'headers'):
                 # Some APIs include token usage in headers (like OpenAI)
@@ -351,6 +377,7 @@ class LoggingInterceptor:
             logger.warning(f"[LLM RESPONSE] Could not extract response content: {e}")
 
         logger.info(f"=" * 80)
+        # Return response unchanged
         return response
 
 
@@ -417,6 +444,9 @@ def get_outline_llm():
         print(f"[DEBUG] Creating Outline LLM with model: {llm_model}")
         print(f"[DEBUG] Base URL: {base_url}")
 
+        # Create interceptor for debugging
+        interceptor = LoggingInterceptor()
+
         _outline_llm = LLM(
             model=llm_model,
             api_key=api_key,
@@ -424,7 +454,8 @@ def get_outline_llm():
             max_tokens=65536,  # Set both for compatibility
             max_completion_tokens=65536,  # Set both for compatibility
             temperature=0.0,  # Make output more deterministic
-            timeout=1800  # 30 minutes - accommodate long outline generation
+            timeout=1800,  # 30 minutes - accommodate long outline generation
+            interceptor=interceptor  # Add logging interceptor
         )
     return _outline_llm
 
@@ -443,6 +474,9 @@ def get_llm_by_env(env_var_name: str, default: str = "gpt-4o-mini"):
         print(f"[DEBUG] Creating LLM from {env_var_name}: {llm_model}")
         print(f"[DEBUG] Base URL: {base_url}")
 
+        # Create interceptor for debugging
+        interceptor = LoggingInterceptor()
+
         _llm_cache[env_var_name] = LLM(
             model=llm_model,
             api_key=api_key,
@@ -450,7 +484,8 @@ def get_llm_by_env(env_var_name: str, default: str = "gpt-4o-mini"):
             max_tokens=65536,  # Set both for compatibility
             max_completion_tokens=65536,  # Set both for compatibility
             temperature=0.0,  # Make output more deterministic
-            timeout=1800  # 30 minutes - accommodate complex chapter generation
+            timeout=1800,  # 30 minutes - accommodate complex chapter generation
+            interceptor=interceptor  # Add logging interceptor
         )
 
     return _llm_cache[env_var_name]
