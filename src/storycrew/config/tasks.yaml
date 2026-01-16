@@ -74,7 +74,14 @@ build_outline:
     \ - 第3章：第一次转折/进入新世界（主角做不可逆选择；章末强钩子）\n第二幕（第4-6章）- 对抗与加深： - 第4章：推进与试探（关系升温/线索扩张；埋关键误导）\
     \ - 第5章：中点反转（真相一部分揭开/关系定性；\"换一套理解\"） - 第6章：代价升级 + 失去（分离/背叛/误会加深；重大误判）\n第三幕（第7-9章）-\
     \ 崩塌与解决： - 第7章：全盘崩塌/最低谷（主角失去最大依靠） - 第8章：真相/和解的路径/最终计划（回收核心伏笔，走向对决） - 第9章：终局兑现主题\
-    \ + 余韵（主冲突解决；主题落地；留余味）\n同时创建PlantPayoffTable（伏笔-回收表）和TruthCard（悬疑题材的真相卡）。\n"
+    \ + 余韵（主冲突解决；主题落地；留余味）\n同时创建PlantPayoffTable（伏笔-回收表）和TruthCard（悬疑题材的真相卡）。\n\n\
+    PlantPayoffTable 结构说明：\n每个 PlantPayoffEntry 对象必须包含以下字段：\n- plot_element: 伏笔元素名称（字符串）\n\
+    - planted_chapter: 埋设章节号（整数 1-9）\n- payoff_chapter: 回收章节号（整数 1-9，必须 > planted_chapter）\n\
+    - payoff_type: 回收类型（字符串：\"reveal\"揭示/\"resolution\"解决/\"twist\"反转/\"callback\"\
+    呼应）\n- status: 状态（字符串：\"planted\"已埋设/\"payoff_complete\"已回收）\n\n示例：\n{\n  \"plot_element\"\
+    : \"照片中的女孩\",\n  \"planted_chapter\": 4,\n  \"payoff_chapter\": 7,\n  \"payoff_type\"\
+    : \"reveal\",\n  \"status\": \"planted\"\n}\n\n注意：\n1. plant_payoff_table 必须是对象数组，不是扁平的键值对列表\n\
+    2. 每个对象必须包含上述5个字段\n3. planted_chapter < payoff_chapter\n\n\""
   expected_output: "严格JSON格式： {\n  \"chapters\": [9个ChapterOutline对象],\n  \"plant_payoff_table\"\
     : [PlantPayoffEntry对象数组],\n  \"truth_card\": {...} (悬疑题材)\n}\n每章必须有明确的信息增量和情绪增量。\
     \ 章末钩子必须强有力，勾住读者。 不要包含JSON之外的文字。\n"
