@@ -11,6 +11,10 @@ from typing import List, Dict, Any
 
 logger = logging.getLogger("StoryCrew")
 
+# Import event listeners to register them with CrewAI event bus
+# This import statement activates all listeners in the package
+import storycrew.listeners  # noqa: F401
+
 # ==================== JSON RULES INJECTION ====================
 # This function injects universal JSON rules into the tasks config at import time
 def _inject_json_rules_at_import_time():
@@ -149,238 +153,6 @@ def repair_json(json_str: str) -> str:
         return json_str
 
 
-# Simple interceptor to log LLM responses for debugging
-class LoggingInterceptor:
-    """Intercepts LLM responses to log raw output and token usage for debugging.
-
-    Implements CrewAI's BaseInterceptor interface with on_outbound/on_inbound methods.
-    """
-
-    def __init__(self):
-        self.request_count = 0
-        self.llm_instance = None  # Will be set to track token usage
-
-    def set_llm(self, llm_instance):
-        """Set the LLM instance to track token usage."""
-        self.llm_instance = llm_instance
-
-    def _count_tokens(self, text: str) -> int:
-        """Estimate token count using a simple heuristic.
-
-        Approximate: 1 token ≈ 4 characters for English, 2-3 characters for Chinese
-        This is a rough estimate, actual token count depends on the tokenizer.
-        """
-        if not text:
-            return 0
-
-        # Count Chinese characters (Unicode range for CJK)
-        chinese_chars = sum(1 for c in text if '\u4e00' <= c <= '\u9fff')
-        # Count English characters and others
-        other_chars = len(text) - chinese_chars
-
-        # Rough estimate: Chinese ~2 chars/token, English ~4 chars/token
-        estimated_tokens = (chinese_chars / 2) + (other_chars / 4)
-        return int(estimated_tokens)
-
-    def on_outbound(self, request):
-        """Intercept outbound request before sending to LLM.
-
-        Args:
-            request: httpx.Request object
-
-        Returns:
-            Modified request object (unchanged, only logging)
-        """
-        self.request_count += 1
-
-        # Debug: Log when interceptor is called
-        print(f"[DEBUG] LoggingInterceptor.on_outbound invoked - Request #{self.request_count}")
-
-        logger.info(f"=" * 80)
-        logger.info(f"[LLM INTERCEPTOR] Request #{self.request_count}")
-        logger.info(f"[LLM INTERCEPTOR] Request URL: {request.url}")
-        logger.info(f"[LLM INTERCEPTOR] Request Method: {request.method}")
-
-        # === Log Request Prompt ===
-        try:
-            request_body = None
-            request_text = None
-
-            # Try to get request body
-            if hasattr(request, 'content'):
-                request_body = request.content
-            elif hasattr(request, 'body'):
-                request_body = request.body
-
-            # Try to extract request text
-            if request_body:
-                if isinstance(request_body, bytes):
-                    try:
-                        request_text = request_body.decode('utf-8')
-                    except UnicodeDecodeError:
-                        request_text = str(request_body)
-                elif isinstance(request_body, str):
-                    request_text = request_body
-                else:
-                    request_text = str(request_body)
-
-            # Parse request as JSON to extract messages
-            if request_text:
-                import json
-                try:
-                    request_json = json.loads(request_text)
-
-                    # Extract messages/content for logging
-                    if 'messages' in request_json:
-                        messages = request_json['messages']
-                        logger.info(f"[LLM REQUEST] 📤 Request contains {len(messages)} messages")
-
-                        # Log each message
-                        for i, msg in enumerate(messages):
-                            role = msg.get('role', 'unknown')
-                            content = msg.get('content', '')
-
-                            # Handle string content
-                            if isinstance(content, str):
-                                token_count = self._count_tokens(content)
-                                logger.info(f"[LLM REQUEST] Message {i+1} [{role}] ({token_count:,} tokens est.):")
-                                # Log first 1000 chars for preview
-                                preview = content[:1000]
-                                if len(content) > 1000:
-                                    preview += f"... [truncated, total {len(content)} chars]"
-                                logger.info(f"[LLM REQUEST] {preview}")
-
-                            # Handle structured content (e.g., with image_url)
-                            elif isinstance(content, list):
-                                logger.info(f"[LLM REQUEST] Message {i+1} [{role}]: (structured content)")
-                                for part in content:
-                                    if isinstance(part, dict):
-                                        if 'text' in part:
-                                            token_count = self._count_tokens(part['text'])
-                                            logger.info(f"[LLM REQUEST]   - Text ({token_count:,} tokens est.): {part['text'][:500]}")
-                                        elif 'image_url' in part:
-                                            logger.info(f"[LLM REQUEST]   - Image URL: {part['image_url'][:100]}")
-
-                    elif 'prompt' in request_json:
-                        prompt_text = request_json['prompt']
-                        token_count = self._count_tokens(prompt_text)
-                        logger.info(f"[LLM REQUEST] 📤 Prompt ({token_count:,} tokens est.):")
-                        logger.info(f"[LLM REQUEST] {prompt_text[:2000]}")
-
-                    # Log full request body as fallback (truncated)
-                    else:
-                        logger.info(f"[LLM REQUEST] 📤 Request Body (first 2000 chars):")
-                        logger.info(f"[LLM REQUEST] {str(request_json)[:2000]}")
-
-                except json.JSONDecodeError:
-                    # Not JSON, log as text
-                    token_count = self._count_tokens(request_text)
-                    logger.info(f"[LLM REQUEST] 📤 Request Body ({token_count:,} tokens est., first 2000 chars):")
-                    logger.info(f"[LLM REQUEST] {request_text[:2000]}")
-
-        except Exception as e:
-            logger.warning(f"[LLM REQUEST] Could not extract request prompt: {e}")
-
-        # Return request unchanged
-        return request
-
-    def on_inbound(self, response):
-        """Intercept inbound response after receiving from LLM.
-
-        Args:
-            response: httpx.Response object
-
-        Returns:
-            Modified response object (unchanged, only logging)
-        """
-        logger.info(f"[LLM INTERCEPTOR] Response Status: {response.status_code}")
-
-        # === Log Response Content ===
-        try:
-            if hasattr(response, 'headers'):
-                # Some APIs include token usage in headers (like OpenAI)
-                logger.info(f"[LLM RESPONSE] Response Headers: {dict(response.headers)}")
-
-            # Try to parse JSON response for usage field
-            if hasattr(response, 'text'):
-                import json
-                try:
-                    response_json = json.loads(response.text)
-
-                    # Extract token usage
-                    if 'usage' in response_json:
-                        usage = response_json['usage']
-                        prompt_tokens = usage.get('prompt_tokens', usage.get('input_tokens', 0))
-                        completion_tokens = usage.get('completion_tokens', usage.get('output_tokens', 0))
-                        total_tokens = usage.get('total_tokens', prompt_tokens + completion_tokens)
-
-                        logger.info(f"[LLM TOKENS] 📊 Actual Token Usage (from API):")
-                        logger.info(f"[LLM TOKENS]   Input (prompt):  {prompt_tokens:,} tokens")
-                        logger.info(f"[LLM TOKENS]   Output (completion): {completion_tokens:,} tokens")
-                        logger.info(f"[LLM TOKENS]   Total: {total_tokens:,} tokens")
-
-                        # Calculate cost estimate
-                        input_cost = (prompt_tokens / 1_000_000) * 0.50
-                        output_cost = (completion_tokens / 1_000_000) * 1.50
-                        total_cost = input_cost + output_cost
-                        logger.info(f"[LLM TOKENS]   Est. Cost: ${total_cost:.4f}")
-
-                    # Extract and log response content
-                    if 'choices' in response_json and len(response_json['choices']) > 0:
-                        # OpenAI-style response
-                        choice = response_json['choices'][0]
-                        if 'message' in choice:
-                            content = choice['message'].get('content', '')
-                        elif 'text' in choice:
-                            content = choice['text']
-                        else:
-                            content = str(choice)
-
-                        token_count = self._count_tokens(content)
-                        logger.info(f"[LLM RESPONSE] 📥 Response Content ({token_count:,} tokens est.):")
-                        # Log more content (up to 5000 chars)
-                        if len(content) > 5000:
-                            logger.info(f"[LLM RESPONSE] {content[:5000]}... [truncated, total {len(content)} chars]")
-                        else:
-                            logger.info(f"[LLM RESPONSE] {content}")
-
-                    elif 'content' in response_json or 'text' in response_json:
-                        # Direct content field
-                        content = response_json.get('content', response_json.get('text', ''))
-                        token_count = self._count_tokens(content)
-                        logger.info(f"[LLM RESPONSE] 📥 Response Content ({token_count:,} tokens est.):")
-                        if len(content) > 5000:
-                            logger.info(f"[LLM RESPONSE] {content[:5000]}... [truncated, total {len(content)} chars]")
-                        else:
-                            logger.info(f"[LLM RESPONSE] {content}")
-
-                    else:
-                        # Log full JSON as fallback
-                        logger.info(f"[LLM RESPONSE] 📥 Response JSON (first 3000 chars):")
-                        logger.info(f"[LLM RESPONSE] {str(response_json)[:3000]}")
-
-                except json.JSONDecodeError:
-                    # Not JSON, log as text
-                    if hasattr(response, 'text'):
-                        content = response.text
-                        token_count = self._count_tokens(content)
-                        logger.info(f"[LLM RESPONSE] 📥 Response Text ({token_count:,} tokens est., first 5000 chars):")
-                        logger.info(f"[LLM RESPONSE] {content[:5000]}")
-
-            elif hasattr(response, 'content'):
-                content = response.content.decode('utf-8', errors='ignore')
-                token_count = self._count_tokens(content)
-                logger.info(f"[LLM RESPONSE] 📥 Response Content ({token_count:,} tokens est., first 5000 chars):")
-                logger.info(f"[LLM RESPONSE] {content[:5000]}")
-
-        except Exception as e:
-            logger.warning(f"[LLM RESPONSE] Could not extract response content: {e}")
-
-        logger.info(f"=" * 80)
-        # Return response unchanged
-        return response
-
-
 # Import Pydantic models for structured outputs
 from storycrew.models import (
     StorySpec, StorySpecWithResult, Concept, BookOutline, StoryBible,
@@ -413,9 +185,6 @@ def get_llm():
         print(f"[DEBUG] Creating LLM with model: {llm_model}")
         print(f"[DEBUG] Base URL: {base_url}")
 
-        # Create interceptor for debugging
-        interceptor = LoggingInterceptor()
-
         _llm = LLM(
             model=llm_model,
             api_key=api_key,
@@ -423,8 +192,7 @@ def get_llm():
             max_tokens=65536,  # Set both for compatibility
             max_completion_tokens=65536,  # Set both for compatibility
             temperature=0.0,  # Make output more deterministic
-            timeout=1800,  # 30 minutes - accommodate complex chapters (6-9) with validation overhead
-            interceptor=interceptor  # Add logging interceptor
+            timeout=1800  # 30 minutes - accommodate complex chapters (6-9) with validation overhead
         )
     return _llm
 
@@ -444,9 +212,6 @@ def get_outline_llm():
         print(f"[DEBUG] Creating Outline LLM with model: {llm_model}")
         print(f"[DEBUG] Base URL: {base_url}")
 
-        # Create interceptor for debugging
-        interceptor = LoggingInterceptor()
-
         _outline_llm = LLM(
             model=llm_model,
             api_key=api_key,
@@ -454,8 +219,7 @@ def get_outline_llm():
             max_tokens=65536,  # Set both for compatibility
             max_completion_tokens=65536,  # Set both for compatibility
             temperature=0.0,  # Make output more deterministic
-            timeout=1800,  # 30 minutes - accommodate long outline generation
-            interceptor=interceptor  # Add logging interceptor
+            timeout=1800  # 30 minutes - accommodate long outline generation
         )
     return _outline_llm
 
@@ -474,9 +238,6 @@ def get_llm_by_env(env_var_name: str, default: str = "gpt-4o-mini"):
         print(f"[DEBUG] Creating LLM from {env_var_name}: {llm_model}")
         print(f"[DEBUG] Base URL: {base_url}")
 
-        # Create interceptor for debugging
-        interceptor = LoggingInterceptor()
-
         _llm_cache[env_var_name] = LLM(
             model=llm_model,
             api_key=api_key,
@@ -484,8 +245,7 @@ def get_llm_by_env(env_var_name: str, default: str = "gpt-4o-mini"):
             max_tokens=65536,  # Set both for compatibility
             max_completion_tokens=65536,  # Set both for compatibility
             temperature=0.0,  # Make output more deterministic
-            timeout=1800,  # 30 minutes - accommodate complex chapter generation
-            interceptor=interceptor  # Add logging interceptor
+            timeout=1800  # 30 minutes - accommodate complex chapter generation
         )
 
     return _llm_cache[env_var_name]
