@@ -5,7 +5,7 @@ from storycrew.crew import Storycrew
 from typing import Dict, Any, Optional
 from copy import deepcopy
 from storycrew.models import (
-    SceneList, ChapterDraft, ChapterRevision, JudgeReport,
+    SceneList, JudgeReport,
     ChapterGenerationState, RetryLevel, determine_retry_level
 )
 
