@@ -1,26 +1,21 @@
 build_story_spec:
-  description: '根据用户输入的题材（genre: {genre}）和主题句（theme_statement: {theme_statement}），
-    首先生成一个吸引人的小说名称（2-8个中文字符），然后创建完整的故事规格（StorySpec）和风格指南（StyleGuide）。
-
-    {UNIVERSAL_JSON_RULES}
-
-
-    用户可能还提供了其他偏好：{additional_preferences}
-
-    **第一步：生成小说名称** - 根据{genre}题材和{theme_statement}主题 - 生成一个简短、吸引人、符合题材特点的小说名称 - 名称长度：2-8个中文字符
-    - 爱情题材示例：《心动时刻》、《错位的我们》、《职场迷情》 - 悬疑题材示例：《迷雾背后》、《最后一名证人》、《消失的档案》 - 避免过于俗套的名称，要有一定文学性或悬念感
-
-    **第二步：创建StorySpec** 1. 确定题材是"romance"（都市职场爱情）还是"mystery"（本格/社会派悬疑） 2. 设置叙事视角为第三人称
-    3. 总章数：9章，每章目标3000字（允许±10%） 4. 语言：中文 5. 基调：现实、直白、有张力 6. 禁忌：未成年人性内容、过度血腥细节、仇恨/歧视性表达
-    7. 必须包含：章末钩子、每章信息增量、每章情绪转折
-
-    对于爱情题材额外设置： - relationship_arc: 从陌生/互斥 → 接近 → 绑定 → 破裂 → 选择/牺牲 → 终局 - emotional_turns_per_chapter:
-    1
-
-    对于悬疑题材额外设置： - mystery_question: 一句话概括核心谜题 - clue_budget_rule: 每章至少1条可见线索入库 - fair_play_rule:
-    终局解答所用关键线索必须在前文出现
-
-    '
+  description: "根据用户输入的题材（genre: {genre}）和主题句（theme_statement: {theme_statement}），\
+    \ 首先生成一个吸引人的小说名称（2-8个中文字符），然后创建完整的故事规格（StorySpec）和风格指南（StyleGuide）。\n⚠️ **JSON\
+    \ 格式强制约束（输出前必须自检）**\n\n**基础格式要求：**\n1. 所有键名（property names）必须用双引号包围\n   ❌ 错误：{key:\
+    \ \"value\"} 或 {key: \"value\",}\n   ✅ 正确：{\"key\": \"value\"}\n2. 不要使用单引号\n \
+    \  ❌ 错误：{'key': 'value'}\n   ✅ 正确：{\"key\": \"value\"}\n3. 不要有尾随逗号\n   ❌ 错误：{\"\
+    key\": \"value\",}\n   ✅ 正确：{\"key\": \"value\"}\n4. 确保所有花括号 { } 和方括号 [ ] 正确闭合（数量相等）\n\
+    \n**完整性要求：**\n5. 必须一次性生成完整的输出对象，不能中途停止或截断\n6. 在输出前自检：所有必需字段都已包含\n7. 确保所有数组字段完整生成（不生成部分元素就停止）\n\
+    \n**禁止事项：**\n8. ❌ 不要使用省略号或缩写表示继续\n9. ❌ 不要添加注释（JSON不支持注释）\n10. ❌ 不要使用markdown代码块包裹（不要用```json...```）\n\
+    11. ✅ 直接从第一个 { 开始，到最后一个 } 结束\n\n**输出前检查清单：**\n12. ✓ 所有花括号 { 和 } 正确配对\n13. ✓ 所有方括号\
+    \ [ 和 ] 正确配对\n14. ✓ JSON可以完整解析，没有语法错误\n\n\n用户可能还提供了其他偏好：{additional_preferences}\n\
+    **第一步：生成小说名称** - 根据{genre}题材和{theme_statement}主题 - 生成一个简短、吸引人、符合题材特点的小说名称 - 名称长度：2-8个中文字符\
+    \ - 爱情题材示例：《心动时刻》、《错位的我们》、《职场迷情》 - 悬疑题材示例：《迷雾背后》、《最后一名证人》、《消失的档案》 - 避免过于俗套的名称，要有一定文学性或悬念感\n\
+    **第二步：创建StorySpec** 1. 确定题材是\"romance\"（都市职场爱情）还是\"mystery\"（本格/社会派悬疑） 2. 设置叙事视角为第三人称\
+    \ 3. 总章数：9章，每章目标3000字（允许±10%） 4. 语言：中文 5. 基调：现实、直白、有张力 6. 禁忌：未成年人性内容、过度血腥细节、仇恨/歧视性表达\
+    \ 7. 必须包含：章末钩子、每章信息增量、每章情绪转折\n对于爱情题材额外设置： - relationship_arc: 从陌生/互斥 → 接近 → 绑定\
+    \ → 破裂 → 选择/牺牲 → 终局 - emotional_turns_per_chapter: 1\n对于悬疑题材额外设置： - mystery_question:\
+    \ 一句话概括核心谜题 - clue_budget_rule: 每章至少1条可见线索入库 - fair_play_rule: 终局解答所用关键线索必须在前文出现\n"
   expected_output: "严格JSON格式（所有键名必须用双引号包围），包含两个字段：\n{\n  \"novel_name\": \"小说名称（2-8个中文字符）\"\
     ,\n  \"story_spec\": {\n    \"language\": \"zh\",\n    \"genre\": \"romance\"\
     或\"mystery\",\n    \"subgenre\": \"urban_workplace\"等,\n    \"total_chapters\"\
@@ -37,15 +32,22 @@ build_story_spec:
     \ 不要包含任何JSON之外的文字说明。\n"
   agent: theme_interpreter
 build_concept:
-  description: "基于StorySpec创建人物概念和关系网络。\n{UNIVERSAL_JSON_RULES}\n\n**⚠️ 完整性要求（最高优先级\
-    \ - 必须严格遵守）** - 必须一次性生成完整的Concept对象，不能中途停止或截断 - 必须包含所有必需字段：characters, relationships,\
-    \ core_conflict - 必须包含题材特定字段：workplace_ecosystem (爱情) 或 suspect_pool (悬疑) - characters数组必须包含所有人物（爱情：2-3个，悬疑：主要人物）\
-    \ - relationships数组必须包含完整的关系网络\n题材：{genre} 主题句：{theme_statement} StorySpec: {story_spec}\n\
-    对于爱情题材（都市职场）： 1. 设计2-3个主要人物（主角、配角） 2. 每个人物包含：name, role, age, occupation, personality\
-    \ (列表),\n   motivation, secrets (列表), speech_pattern, forbidden_phrases, backstory,\
-    \ arc_description\n3. 设计人物关系（relationship_type, status, history, development_plan）\
-    \ 4. 设计职场生态：公司/组织背景、角色职责、权力关系 5. 设计情感阻碍机制：阶层差异/误会/价值观冲突/过往创伤\n对于悬疑题材（本格/社会派）：\
-    \ 1. 设计主要人物（侦探、嫌疑人、受害者等） 2. 设计嫌疑人池（3-5人，含动机和可疑点） 3. 设计核心谜题（mystery_question）和真相草案（truth_solution）\
+  description: "基于StorySpec创建人物概念和关系网络。\n⚠️ **JSON 格式强制约束（输出前必须自检）**\n\n**基础格式要求：**\n\
+    1. 所有键名（property names）必须用双引号包围\n   ❌ 错误：{key: \"value\"} 或 {key: \"value\",}\n\
+    \   ✅ 正确：{\"key\": \"value\"}\n2. 不要使用单引号\n   ❌ 错误：{'key': 'value'}\n   ✅ 正确：{\"\
+    key\": \"value\"}\n3. 不要有尾随逗号\n   ❌ 错误：{\"key\": \"value\",}\n   ✅ 正确：{\"key\"\
+    : \"value\"}\n4. 确保所有花括号 { } 和方括号 [ ] 正确闭合（数量相等）\n\n**完整性要求：**\n5. 必须一次性生成完整的输出对象，不能中途停止或截断\n\
+    6. 在输出前自检：所有必需字段都已包含\n7. 确保所有数组字段完整生成（不生成部分元素就停止）\n\n**禁止事项：**\n8. ❌ 不要使用省略号或缩写表示继续\n\
+    9. ❌ 不要添加注释（JSON不支持注释）\n10. ❌ 不要使用markdown代码块包裹（不要用```json...```）\n11. ✅ 直接从第一个\
+    \ { 开始，到最后一个 } 结束\n\n**输出前检查清单：**\n12. ✓ 所有花括号 { 和 } 正确配对\n13. ✓ 所有方括号 [ 和 ] 正确配对\n\
+    14. ✓ JSON可以完整解析，没有语法错误\n\n\n**⚠️ 完整性要求（最高优先级 - 必须严格遵守）** - 必须一次性生成完整的Concept对象，不能中途停止或截断\
+    \ - 必须包含所有必需字段：characters, relationships, core_conflict - 必须包含题材特定字段：workplace_ecosystem\
+    \ (爱情) 或 suspect_pool (悬疑) - characters数组必须包含所有人物（爱情：2-3个，悬疑：主要人物） - relationships数组必须包含完整的关系网络\n\
+    题材：{genre} 主题句：{theme_statement} StorySpec: {story_spec}\n对于爱情题材（都市职场）： 1. 设计2-3个主要人物（主角、配角）\
+    \ 2. 每个人物包含：name, role, age, occupation, personality (列表),\n   motivation, secrets\
+    \ (列表), speech_pattern, forbidden_phrases, backstory, arc_description\n3. 设计人物关系（relationship_type,\
+    \ status, history, development_plan） 4. 设计职场生态：公司/组织背景、角色职责、权力关系 5. 设计情感阻碍机制：阶层差异/误会/价值观冲突/过往创伤\n\
+    对于悬疑题材（本格/社会派）： 1. 设计主要人物（侦探、嫌疑人、受害者等） 2. 设计嫌疑人池（3-5人，含动机和可疑点） 3. 设计核心谜题（mystery_question）和真相草案（truth_solution）\
     \ 4. 设计动机链：每个嫌疑人的作案动机 5. 设计误导点（red_herrings）：3-5个，必须可合理解释\n"
   expected_output: '严格JSON格式，包含characters数组、relationships数组、 workplace_ecosystem (爱情)
     或 suspect_pool (悬疑)、core_conflict。 每个人物必须包含完整的字段。不要包含JSON之外的文字。
@@ -53,68 +55,66 @@ build_concept:
     '
   agent: concept_designer
 build_outline:
-  description: '基于StorySpec和人物概念设计完整的三幕九章大纲。
-
-    {UNIVERSAL_JSON_RULES}
-
-
-    **⚠️ 完整性要求（最高优先级 - 必须严格遵守）** - 必须一次性生成完整的9章大纲，不能中途停止或截断 - chapters数组必须包含9个章节对象（索引0-8）
-    - 每章必须有 chapter_number (1-9) 和完整字段
-
-    StorySpec: {story_spec} Concept: {concept}
-
-    你需要创建9章大纲，每章包含： - chapter_number, title, summary - goals (本章目标列表) - conflict (本章主要冲突)
-    - information_increment (本章新增的信息/认知变化) - emotional_increment (本章情绪变化) - chapter_hook
-    (章末钩子，必须抓人) - plants_this_chapter (埋设的伏笔) - payoffs_this_chapter (回收的伏笔) - scenes
-    (简略场景列表，每个场景包含scene_purpose, conflict, information_gain, emotional_shift) - target_words:
-    3000
-
-    三幕结构： 第一幕（第1-3章）- 建立与触发： - 第1章：日常破裂 + 主角欲望（提出核心缺失/渴望；埋第一层伏笔） - 第2章：相遇/案件引爆 + 代价（爱情相遇机制；悬疑案发/委托）
-    - 第3章：第一次转折/进入新世界（主角做不可逆选择；章末强钩子）
-
-    第二幕（第4-6章）- 对抗与加深： - 第4章：推进与试探（关系升温/线索扩张；埋关键误导） - 第5章：中点反转（真相一部分揭开/关系定性；"换一套理解"）
-    - 第6章：代价升级 + 失去（分离/背叛/误会加深；重大误判）
-
-    第三幕（第7-9章）- 崩塌与解决： - 第7章：全盘崩塌/最低谷（主角失去最大依靠） - 第8章：真相/和解的路径/最终计划（回收核心伏笔，走向对决） -
-    第9章：终局兑现主题 + 余韵（主冲突解决；主题落地；留余味）
-
-    同时创建PlantPayoffTable（伏笔-回收表）和TruthCard（悬疑题材的真相卡）。
-
-    '
+  description: "基于StorySpec和人物概念设计完整的三幕九章大纲。\n⚠️ **JSON 格式强制约束（输出前必须自检）**\n\n**基础格式要求：**\n\
+    1. 所有键名（property names）必须用双引号包围\n   ❌ 错误：{key: \"value\"} 或 {key: \"value\",}\n\
+    \   ✅ 正确：{\"key\": \"value\"}\n2. 不要使用单引号\n   ❌ 错误：{'key': 'value'}\n   ✅ 正确：{\"\
+    key\": \"value\"}\n3. 不要有尾随逗号\n   ❌ 错误：{\"key\": \"value\",}\n   ✅ 正确：{\"key\"\
+    : \"value\"}\n4. 确保所有花括号 { } 和方括号 [ ] 正确闭合（数量相等）\n\n**完整性要求：**\n5. 必须一次性生成完整的输出对象，不能中途停止或截断\n\
+    6. 在输出前自检：所有必需字段都已包含\n7. 确保所有数组字段完整生成（不生成部分元素就停止）\n\n**禁止事项：**\n8. ❌ 不要使用省略号或缩写表示继续\n\
+    9. ❌ 不要添加注释（JSON不支持注释）\n10. ❌ 不要使用markdown代码块包裹（不要用```json...```）\n11. ✅ 直接从第一个\
+    \ { 开始，到最后一个 } 结束\n\n**输出前检查清单：**\n12. ✓ 所有花括号 { 和 } 正确配对\n13. ✓ 所有方括号 [ 和 ] 正确配对\n\
+    14. ✓ JSON可以完整解析，没有语法错误\n\n\n**⚠️ 完整性要求（最高优先级 - 必须严格遵守）** - 必须一次性生成完整的9章大纲，不能中途停止或截断\
+    \ - chapters数组必须包含9个章节对象（索引0-8） - 每章必须有 chapter_number (1-9) 和完整字段\nStorySpec:\
+    \ {story_spec} Concept: {concept}\n你需要创建9章大纲，每章包含： - chapter_number, title, summary\
+    \ - goals (本章目标列表) - conflict (本章主要冲突) - information_increment (本章新增的信息/认知变化)\
+    \ - emotional_increment (本章情绪变化) - chapter_hook (章末钩子，必须抓人) - plants_this_chapter\
+    \ (埋设的伏笔) - payoffs_this_chapter (回收的伏笔) - scenes (简略场景列表，每个场景包含scene_purpose,\
+    \ conflict, information_gain, emotional_shift) - target_words: 3000\n三幕结构： 第一幕（第1-3章）-\
+    \ 建立与触发： - 第1章：日常破裂 + 主角欲望（提出核心缺失/渴望；埋第一层伏笔） - 第2章：相遇/案件引爆 + 代价（爱情相遇机制；悬疑案发/委托）\
+    \ - 第3章：第一次转折/进入新世界（主角做不可逆选择；章末强钩子）\n第二幕（第4-6章）- 对抗与加深： - 第4章：推进与试探（关系升温/线索扩张；埋关键误导）\
+    \ - 第5章：中点反转（真相一部分揭开/关系定性；\"换一套理解\"） - 第6章：代价升级 + 失去（分离/背叛/误会加深；重大误判）\n第三幕（第7-9章）-\
+    \ 崩塌与解决： - 第7章：全盘崩塌/最低谷（主角失去最大依靠） - 第8章：真相/和解的路径/最终计划（回收核心伏笔，走向对决） - 第9章：终局兑现主题\
+    \ + 余韵（主冲突解决；主题落地；留余味）\n同时创建PlantPayoffTable（伏笔-回收表）和TruthCard（悬疑题材的真相卡）。\n"
   expected_output: "严格JSON格式： {\n  \"chapters\": [9个ChapterOutline对象],\n  \"plant_payoff_table\"\
     : [PlantPayoffEntry对象数组],\n  \"truth_card\": {...} (悬疑题材)\n}\n每章必须有明确的信息增量和情绪增量。\
     \ 章末钩子必须强有力，勾住读者。 不要包含JSON之外的文字。\n"
   agent: plot_architect
 init_bible:
-  description: '初始化StoryBible，吸收StorySpec、Concept和Outline的信息。
-
-    {UNIVERSAL_JSON_RULES}
-
-
-    **⚠️ 完整性要求（最高优先级 - 必须严格遵守）** - 必须一次性生成完整的StoryBible对象，不能中途停止或截断 - 必须包含所有必需字段：characters,
-    relationships, clues, timeline, chapter_summaries, genre等 - characters数组必须包含Concept中的所有人物
-    - relationships数组必须包含Concept中的所有关系
-
-    StorySpec: {story_spec} Concept: {concept} Outline: {outline}
-
-    创建StoryBible结构： - characters: 从Concept导入人物 - relationships: 从Concept导入关系 - clues:
-    {planted: [], resolved: [], open: []} (悬疑) - timeline: [] - chapter_summaries:
-    [] - immutable_facts: [] - used_imagery: [] - used_metaphors: [] - genre: "romance"
-    or "mystery" - truth_card: (悬疑，从Outline导入，仅限内部Agent访问）
-
-    '
+  description: "初始化StoryBible，吸收StorySpec、Concept和Outline的信息。\n⚠️ **JSON 格式强制约束（输出前必须自检）**\n\
+    \n**基础格式要求：**\n1. 所有键名（property names）必须用双引号包围\n   ❌ 错误：{key: \"value\"} 或 {key:\
+    \ \"value\",}\n   ✅ 正确：{\"key\": \"value\"}\n2. 不要使用单引号\n   ❌ 错误：{'key': 'value'}\n\
+    \   ✅ 正确：{\"key\": \"value\"}\n3. 不要有尾随逗号\n   ❌ 错误：{\"key\": \"value\",}\n   ✅\
+    \ 正确：{\"key\": \"value\"}\n4. 确保所有花括号 { } 和方括号 [ ] 正确闭合（数量相等）\n\n**完整性要求：**\n\
+    5. 必须一次性生成完整的输出对象，不能中途停止或截断\n6. 在输出前自检：所有必需字段都已包含\n7. 确保所有数组字段完整生成（不生成部分元素就停止）\n\
+    \n**禁止事项：**\n8. ❌ 不要使用省略号或缩写表示继续\n9. ❌ 不要添加注释（JSON不支持注释）\n10. ❌ 不要使用markdown代码块包裹（不要用```json...```）\n\
+    11. ✅ 直接从第一个 { 开始，到最后一个 } 结束\n\n**输出前检查清单：**\n12. ✓ 所有花括号 { 和 } 正确配对\n13. ✓ 所有方括号\
+    \ [ 和 ] 正确配对\n14. ✓ JSON可以完整解析，没有语法错误\n\n\n**⚠️ 完整性要求（最高优先级 - 必须严格遵守）** - 必须一次性生成完整的StoryBible对象，不能中途停止或截断\
+    \ - 必须包含所有必需字段：characters, relationships, clues, timeline, chapter_summaries,\
+    \ genre等 - characters数组必须包含Concept中的所有人物 - relationships数组必须包含Concept中的所有关系\n\
+    StorySpec: {story_spec} Concept: {concept} Outline: {outline}\n创建StoryBible结构：\
+    \ - characters: 从Concept导入人物 - relationships: 从Concept导入关系 - clues: {planted:\
+    \ [], resolved: [], open: []} (悬疑) - timeline: [] - chapter_summaries: [] - immutable_facts:\
+    \ [] - used_imagery: [] - used_metaphors: [] - genre: \"romance\" or \"mystery\"\
+    \ - truth_card: (悬疑，从Outline导入，仅限内部Agent访问）\n"
   expected_output: '严格JSON格式的StoryBible对象，已初始化所有必需字段。 不要包含JSON之外的文字。
 
     '
   agent: continuity_keeper
 plan_chapter:
-  description: "为第{chapter_number}章创建详细的SceneList（场景列表）。\n{UNIVERSAL_JSON_RULES}\n\
-    \n**⚠️ 完整性要求（最高优先级 - 必须严格遵守）** - 必须一次性生成完整的6-10个场景列表，不能中途停止或截断 - scenes数组必须包含6到10个完整的场景对象\n\
-    当前章节：{chapter_number} 章节大纲：{chapter_outline} StoryBible(public): {story_bible_public}\
-    \ StorySpec: {story_spec}\n**字数硬约束（必须自检后再输出）** - total_target_words 固定为 3000 -\
-    \ scenes 数组中每个场景必须给出 target_words（建议 350-650） - scenes 内所有 target_words 之和必须等于\
-    \ total_target_words（允许误差±100字以内）\n  即：abs(sum(scene.target_words) - 3000) <=\
-    \ 100\n\n你需要把章纲细化为6-10个详细的场景，每个场景包含： - scene_number (1-10) - purpose (场景目的：推进事件/揭示信息/触发情绪)\
+  description: "为第{chapter_number}章创建详细的SceneList（场景列表）。\n⚠️ **JSON 格式强制约束（输出前必须自检）**\n\
+    \n**基础格式要求：**\n1. 所有键名（property names）必须用双引号包围\n   ❌ 错误：{key: \"value\"} 或 {key:\
+    \ \"value\",}\n   ✅ 正确：{\"key\": \"value\"}\n2. 不要使用单引号\n   ❌ 错误：{'key': 'value'}\n\
+    \   ✅ 正确：{\"key\": \"value\"}\n3. 不要有尾随逗号\n   ❌ 错误：{\"key\": \"value\",}\n   ✅\
+    \ 正确：{\"key\": \"value\"}\n4. 确保所有花括号 { } 和方括号 [ ] 正确闭合（数量相等）\n\n**完整性要求：**\n\
+    5. 必须一次性生成完整的输出对象，不能中途停止或截断\n6. 在输出前自检：所有必需字段都已包含\n7. 确保所有数组字段完整生成（不生成部分元素就停止）\n\
+    \n**禁止事项：**\n8. ❌ 不要使用省略号或缩写表示继续\n9. ❌ 不要添加注释（JSON不支持注释）\n10. ❌ 不要使用markdown代码块包裹（不要用```json...```）\n\
+    11. ✅ 直接从第一个 { 开始，到最后一个 } 结束\n\n**输出前检查清单：**\n12. ✓ 所有花括号 { 和 } 正确配对\n13. ✓ 所有方括号\
+    \ [ 和 ] 正确配对\n14. ✓ JSON可以完整解析，没有语法错误\n\n\n**⚠️ 完整性要求（最高优先级 - 必须严格遵守）** - 必须一次性生成完整的6-10个场景列表，不能中途停止或截断\
+    \ - scenes数组必须包含6到10个完整的场景对象\n当前章节：{chapter_number} 章节大纲：{chapter_outline} StoryBible(public):\
+    \ {story_bible_public} StorySpec: {story_spec}\n**字数硬约束（必须自检后再输出）** - total_target_words\
+    \ 固定为 3000 - scenes 数组中每个场景必须给出 target_words（建议 350-650） - scenes 内所有 target_words\
+    \ 之和必须等于 total_target_words（允许误差±100字以内）\n  即：abs(sum(scene.target_words) - 3000)\
+    \ <= 100\n\n你需要把章纲细化为6-10个详细的场景，每个场景包含： - scene_number (1-10) - purpose (场景目的：推进事件/揭示信息/触发情绪)\
     \ - setting (场景地点/时间) - characters (出场人物) - conflict (场景内的冲突) - action_beat (动作节拍)\
     \ - dialogue_focus (对白重点) - information_revealed (揭示的信息) - emotional_shift (情绪变化)\
     \ - plot_advancement (情节推进) - exit_hook (出口钩子，如何过渡到下一场) - target_words (字数目标，建议400-600字)\
@@ -167,11 +167,18 @@ write_chapter:
     '
   agent: chapter_writer
 update_bible:
-  description: "{UNIVERSAL_JSON_RULES}\n\n**⚠️ 字段类型强制约束** - used_imagery 和 used_metaphors\
-    \ 必须是 **扁平的字符串数组** - ❌ 错误： \"used_metaphors\": [\"比喻1\", {\"type\": \"暗喻\", \"\
-    content\": \"内容\"}] - ✅ 正确： \"used_metaphors\": [\"比喻1\", \"比喻2\", \"比喻3\"] -\
-    \ 每个元素只能是纯字符串，不能是对象或数组\n当前章节：{chapter_number} 前序任务已生成章节正文，请从上下文中获取。 StoryBible(full):\
-    \ {story_bible_full} StorySpec: {story_spec}\n你需要： 1. 提取新事实：新增的不可更改事实，加入immutable_facts\
+  description: "⚠️ **JSON 格式强制约束（输出前必须自检）**\n\n**基础格式要求：**\n1. 所有键名（property names）必须用双引号包围\n\
+    \   ❌ 错误：{key: \"value\"} 或 {key: \"value\",}\n   ✅ 正确：{\"key\": \"value\"}\n\
+    2. 不要使用单引号\n   ❌ 错误：{'key': 'value'}\n   ✅ 正确：{\"key\": \"value\"}\n3. 不要有尾随逗号\n\
+    \   ❌ 错误：{\"key\": \"value\",}\n   ✅ 正确：{\"key\": \"value\"}\n4. 确保所有花括号 { } 和方括号\
+    \ [ ] 正确闭合（数量相等）\n\n**完整性要求：**\n5. 必须一次性生成完整的输出对象，不能中途停止或截断\n6. 在输出前自检：所有必需字段都已包含\n\
+    7. 确保所有数组字段完整生成（不生成部分元素就停止）\n\n**禁止事项：**\n8. ❌ 不要使用省略号或缩写表示继续\n9. ❌ 不要添加注释（JSON不支持注释）\n\
+    10. ❌ 不要使用markdown代码块包裹（不要用```json...```）\n11. ✅ 直接从第一个 { 开始，到最后一个 } 结束\n\n**输出前检查清单：**\n\
+    12. ✓ 所有花括号 { 和 } 正确配对\n13. ✓ 所有方括号 [ 和 ] 正确配对\n14. ✓ JSON可以完整解析，没有语法错误\n\n\n\
+    **⚠️ 字段类型强制约束** - used_imagery 和 used_metaphors 必须是 **扁平的字符串数组** - ❌ 错误： \"used_metaphors\"\
+    : [\"比喻1\", {\"type\": \"暗喻\", \"content\": \"内容\"}] - ✅ 正确： \"used_metaphors\"\
+    : [\"比喻1\", \"比喻2\", \"比喻3\"] - 每个元素只能是纯字符串，不能是对象或数组\n当前章节：{chapter_number} 前序任务已生成章节正文，请从上下文中获取。\
+    \ StoryBible(full): {story_bible_full} StorySpec: {story_spec}\n你需要： 1. 提取新事实：新增的不可更改事实，加入immutable_facts\
     \ 2. 更新时间线：创建TimelineEvent对象，记录本章发生的关键事件 3. 更新人物状态：记录人物的变化、新秘密、关系变化 4. 提取线索（悬疑）：识别新线索，加入clues.planted；\n\
     \   识别回收的线索，移至clues.resolved\n5. 生成章摘要：80-150字，概括本章关键事件和变化 6. 追踪意象：记录本章使用的主要意象和比喻，加入used_imagery和used_metaphors\n\
     对于悬疑题材： - 识别所有线索句（包含信息的细节、对话、物品等） - 判断是否为red_herring（误导） - 更新clues.planted, clues.resolved,\
@@ -212,59 +219,29 @@ edit_chapter:
     '
   agent: line_editor
 judge_chapter:
-  description: '对第{chapter_number}章进行质量评审，输出JSON格式的评审报告。
-
-    {UNIVERSAL_JSON_RULES}
-
-
-    当前章节：{chapter_number} 前序任务已生成章节正文，请从上下文中获取。 StoryBible(full): {story_bible_full}
-    StorySpec: {story_spec}
-
-    评审维度（0-10分）： 1. continuity (连续性)：是否有与StoryBible矛盾的地方 2. pacing (节奏)：节奏是否合适，有无拖沓
-    3. character_motivation (人物动机)：人物行为是否合理，动机是否清晰 4. genre_fulfillment (类型满足度)：是否符合爱情/悬疑题材的要求
-    5. prose (文笔)：文笔是否通顺、有感染力 6. hook (钩子)：章末是否有强钩子 7. clue_fairness (悬疑专属)：线索是否公平，读者能否合理推理
-
-    **字数评审标准（分级处理）**:
-
-    使用 count_chinese_words() 统计章节正文的有效字数（汉字+英文单词，排除空白标点）。
-
-    1. 字数不足 (< 2700字):
-
-    - type: "word_count"
-
-    - severity: "major"
-
-    - action: "扩写"
-
-    - 指令：增加场景细节、人物对话、环境描写，将字数扩充至2700-3300字
-
-    2. 字数超标 (> 3300字):
-
-    - type: "word_count"
-
-    - severity: "moderate"
-
-    - action: "精简"
-
-    - 指令：删减冗余描写、重复对话，将字数压缩至2700-3300字
-
-    3. 字数合理 (2700-3300字):
-
-    - 不需要 word_count issue
-
-    **注意**：字数问题通过 issues 数组处理，不再是 hard_fail。
-
-    硬性检查： 1. safety_pass: 是否通过安全合规检查（无违规内容） 2. continuity_conflicts: 连续性矛盾列表（如果有）
-
-    通过标准： - 爱情题材：character_motivation >= 7 AND pacing >= 7 AND hook >= 7 AND genre_fulfillment
-    >= 7 - 悬疑题材：上述条件 AND clue_fairness >= 7 - 硬性：safety_pass = true AND continuity_conflicts为空
-
-    如果不通过，必须提供： 1. issues: 问题列表，每个问题包含type（类型）、severity（严重程度）、note（说明） 2. revision_instructions:
-    可执行的修订指令列表
-
-    输出必须是严格的JSON格式。
-
-    '
+  description: "对第{chapter_number}章进行质量评审，输出JSON格式的评审报告。\n⚠️ **JSON 格式强制约束（输出前必须自检）**\n\
+    \n**基础格式要求：**\n1. 所有键名（property names）必须用双引号包围\n   ❌ 错误：{key: \"value\"} 或 {key:\
+    \ \"value\",}\n   ✅ 正确：{\"key\": \"value\"}\n2. 不要使用单引号\n   ❌ 错误：{'key': 'value'}\n\
+    \   ✅ 正确：{\"key\": \"value\"}\n3. 不要有尾随逗号\n   ❌ 错误：{\"key\": \"value\",}\n   ✅\
+    \ 正确：{\"key\": \"value\"}\n4. 确保所有花括号 { } 和方括号 [ ] 正确闭合（数量相等）\n\n**完整性要求：**\n\
+    5. 必须一次性生成完整的输出对象，不能中途停止或截断\n6. 在输出前自检：所有必需字段都已包含\n7. 确保所有数组字段完整生成（不生成部分元素就停止）\n\
+    \n**禁止事项：**\n8. ❌ 不要使用省略号或缩写表示继续\n9. ❌ 不要添加注释（JSON不支持注释）\n10. ❌ 不要使用markdown代码块包裹（不要用```json...```）\n\
+    11. ✅ 直接从第一个 { 开始，到最后一个 } 结束\n\n**输出前检查清单：**\n12. ✓ 所有花括号 { 和 } 正确配对\n13. ✓ 所有方括号\
+    \ [ 和 ] 正确配对\n14. ✓ JSON可以完整解析，没有语法错误\n\n\n当前章节：{chapter_number} 前序任务已生成章节正文，请从上下文中获取。\
+    \ StoryBible(full): {story_bible_full} StorySpec: {story_spec}\n评审维度（0-10分）： 1.\
+    \ continuity (连续性)：是否有与StoryBible矛盾的地方 2. pacing (节奏)：节奏是否合适，有无拖沓 3. character_motivation\
+    \ (人物动机)：人物行为是否合理，动机是否清晰 4. genre_fulfillment (类型满足度)：是否符合爱情/悬疑题材的要求 5. prose\
+    \ (文笔)：文笔是否通顺、有感染力 6. hook (钩子)：章末是否有强钩子 7. clue_fairness (悬疑专属)：线索是否公平，读者能否合理推理\n\
+    **字数评审标准（分级处理）**:\n使用 count_chinese_words() 统计章节正文的有效字数（汉字+英文单词，排除空白标点）。\n1. 字数不足\
+    \ (< 2700字):\n- type: \"word_count\"\n- severity: \"major\"\n- action: \"扩写\"\n\
+    - 指令：增加场景细节、人物对话、环境描写，将字数扩充至2700-3300字\n2. 字数超标 (> 3300字):\n- type: \"word_count\"\
+    \n- severity: \"moderate\"\n- action: \"精简\"\n- 指令：删减冗余描写、重复对话，将字数压缩至2700-3300字\n\
+    3. 字数合理 (2700-3300字):\n- 不需要 word_count issue\n**注意**：字数问题通过 issues 数组处理，不再是 hard_fail。\n\
+    硬性检查： 1. safety_pass: 是否通过安全合规检查（无违规内容） 2. continuity_conflicts: 连续性矛盾列表（如果有）\n\
+    通过标准： - 爱情题材：character_motivation >= 7 AND pacing >= 7 AND hook >= 7 AND genre_fulfillment\
+    \ >= 7 - 悬疑题材：上述条件 AND clue_fairness >= 7 - 硬性：safety_pass = true AND continuity_conflicts为空\n\
+    如果不通过，必须提供： 1. issues: 问题列表，每个问题包含type（类型）、severity（严重程度）、note（说明） 2. revision_instructions:\
+    \ 可执行的修订指令列表\n输出必须是严格的JSON格式。\n"
   expected_output: "严格JSON格式的JudgeReport对象： {\n  \"chapter\": {chapter_number},\n\
     \  \"word_count\": 实际字数,\n  \"scores\": {\n    \"continuity\": 0-10,\n    \"pacing\"\
     : 0-10,\n    \"character_motivation\": 0-10,\n    \"genre_fulfillment\": 0-10,\n\
@@ -274,18 +251,26 @@ judge_chapter:
     : [\"修订指令1\", \"修订指令2\"],\n  \"strengths\": [\"优点1\", \"优点2\"]\n}\n不要包含JSON之外的任何文字。\n"
   agent: critic_judge
 judge_whole_book:
-  description: "对全书进行最终评审，检查伏笔回收、主题兑现、连续性。\n{UNIVERSAL_JSON_RULES}\n\n全书正文：{book_text}\
-    \ StoryBible: {story_bible} StorySpec: {story_spec}\n检查项： 1. plant_payoff_coverage:\
-    \ 伏笔回收率（已回收/总伏笔，要求≥95%） 2. theme_delivery: 主题兑现度（0-10分，是否实现theme_statement） 3.\
-    \ ending_satisfaction: 结局满意度（0-10分） 4. continuity: 全书连续性扫描 5. character_arc_consistency:\
-    \ 人物弧光一致性\n对于悬疑题材额外检查： 1. clue_fairness_whole: 全书线索公平性 2. truth_reveal_quality:\
-    \ 真相揭示的质量\n通过标准： - plant_payoff_coverage >= 0.95 - theme_delivery >= 8 - ending_satisfaction\
-    \ >= 8 - 无连续性矛盾\n⚠️ 重要：字段类型区分（严格遵守） ============================================================\
-    \ 1️⃣ 评分字段（直接填写数值）：\n   - plant_payoff_coverage: 浮点数（0.0-1.0）\n   - theme_delivery:\
-    \ 整数（0-10）\n   - ending_satisfaction: 整数（0-10）\n\n2️⃣ issues数组中的type字段（只能是以下9种之一）：\n\
-    \   \"continuity\" - 连续性问题\n   \"structure\" - 结构问题\n   \"motivation\" - 人物动机问题\n\
-    \   \"pacing\" - 节奏问题\n   \"clue_fairness\" - 线索公平性问题（悬疑）\n   \"prose\" - 文笔问题\n\
-    \   \"hook\" - 钩子问题\n   \"safety\" - 安全合规问题\n   \"word_count\" - 字数问题\n\n如果不通过，提供targeted_patch_instructions。\n"
+  description: "对全书进行最终评审，检查伏笔回收、主题兑现、连续性。\n⚠️ **JSON 格式强制约束（输出前必须自检）**\n\n**基础格式要求：**\n\
+    1. 所有键名（property names）必须用双引号包围\n   ❌ 错误：{key: \"value\"} 或 {key: \"value\",}\n\
+    \   ✅ 正确：{\"key\": \"value\"}\n2. 不要使用单引号\n   ❌ 错误：{'key': 'value'}\n   ✅ 正确：{\"\
+    key\": \"value\"}\n3. 不要有尾随逗号\n   ❌ 错误：{\"key\": \"value\",}\n   ✅ 正确：{\"key\"\
+    : \"value\"}\n4. 确保所有花括号 { } 和方括号 [ ] 正确闭合（数量相等）\n\n**完整性要求：**\n5. 必须一次性生成完整的输出对象，不能中途停止或截断\n\
+    6. 在输出前自检：所有必需字段都已包含\n7. 确保所有数组字段完整生成（不生成部分元素就停止）\n\n**禁止事项：**\n8. ❌ 不要使用省略号或缩写表示继续\n\
+    9. ❌ 不要添加注释（JSON不支持注释）\n10. ❌ 不要使用markdown代码块包裹（不要用```json...```）\n11. ✅ 直接从第一个\
+    \ { 开始，到最后一个 } 结束\n\n**输出前检查清单：**\n12. ✓ 所有花括号 { 和 } 正确配对\n13. ✓ 所有方括号 [ 和 ] 正确配对\n\
+    14. ✓ JSON可以完整解析，没有语法错误\n\n\n全书正文：{book_text} StoryBible: {story_bible} StorySpec:\
+    \ {story_spec}\n检查项： 1. plant_payoff_coverage: 伏笔回收率（已回收/总伏笔，要求≥95%） 2. theme_delivery:\
+    \ 主题兑现度（0-10分，是否实现theme_statement） 3. ending_satisfaction: 结局满意度（0-10分） 4. continuity:\
+    \ 全书连续性扫描 5. character_arc_consistency: 人物弧光一致性\n对于悬疑题材额外检查： 1. clue_fairness_whole:\
+    \ 全书线索公平性 2. truth_reveal_quality: 真相揭示的质量\n通过标准： - plant_payoff_coverage >= 0.95\
+    \ - theme_delivery >= 8 - ending_satisfaction >= 8 - 无连续性矛盾\n⚠️ 重要：字段类型区分（严格遵守）\
+    \ ============================================================ 1️⃣ 评分字段（直接填写数值）：\n\
+    \   - plant_payoff_coverage: 浮点数（0.0-1.0）\n   - theme_delivery: 整数（0-10）\n   -\
+    \ ending_satisfaction: 整数（0-10）\n\n2️⃣ issues数组中的type字段（只能是以下9种之一）：\n   \"continuity\"\
+    \ - 连续性问题\n   \"structure\" - 结构问题\n   \"motivation\" - 人物动机问题\n   \"pacing\"\
+    \ - 节奏问题\n   \"clue_fairness\" - 线索公平性问题（悬疑）\n   \"prose\" - 文笔问题\n   \"hook\"\
+    \ - 钩子问题\n   \"safety\" - 安全合规问题\n   \"word_count\" - 字数问题\n\n如果不通过，提供targeted_patch_instructions。\n"
   expected_output: "严格JSON格式： {\n  \"is_whole_book\": true,\n  \"plant_payoff_coverage\"\
     : 0.95,\n  \"theme_delivery\": 8,\n  \"ending_satisfaction\": 8,\n  \"scores\"\
     : {\n    \"continuity\": 0-10,\n    \"pacing\": 0-10,\n    \"character_motivation\"\
@@ -299,18 +284,17 @@ judge_whole_book:
     : [\"修订指令1\", \"修订指令2\"],\n  \"strengths\": [\"优点1\", \"优点2\"]\n}\n不要包含JSON之外的文字。\n"
   agent: critic_judge
 generate_novel_metadata:
-  description: '根据小说内容生成书名、简介和目录。
-
-    {UNIVERSAL_JSON_RULES}
-
-
-    StorySpec: {story_spec} StoryBible: {story_bible} 章节标题列表：{chapter_titles}
-
-    你需要生成： 1. 书名：根据小说主题和内容创作一个吸引人的书名（2-8个字） 2. 简介：80-150字的简介，吸引读者但不剧透结局 3. 目录：格式化的章节标题列表
-
-    注意： - 书名要有文学性和吸引力 - 简介要简洁有力，突出核心冲突 - 目录使用"第X章：标题"的格式
-
-    '
+  description: "根据小说内容生成书名、简介和目录。\n⚠️ **JSON 格式强制约束（输出前必须自检）**\n\n**基础格式要求：**\n1.\
+    \ 所有键名（property names）必须用双引号包围\n   ❌ 错误：{key: \"value\"} 或 {key: \"value\",}\n\
+    \   ✅ 正确：{\"key\": \"value\"}\n2. 不要使用单引号\n   ❌ 错误：{'key': 'value'}\n   ✅ 正确：{\"\
+    key\": \"value\"}\n3. 不要有尾随逗号\n   ❌ 错误：{\"key\": \"value\",}\n   ✅ 正确：{\"key\"\
+    : \"value\"}\n4. 确保所有花括号 { } 和方括号 [ ] 正确闭合（数量相等）\n\n**完整性要求：**\n5. 必须一次性生成完整的输出对象，不能中途停止或截断\n\
+    6. 在输出前自检：所有必需字段都已包含\n7. 确保所有数组字段完整生成（不生成部分元素就停止）\n\n**禁止事项：**\n8. ❌ 不要使用省略号或缩写表示继续\n\
+    9. ❌ 不要添加注释（JSON不支持注释）\n10. ❌ 不要使用markdown代码块包裹（不要用```json...```）\n11. ✅ 直接从第一个\
+    \ { 开始，到最后一个 } 结束\n\n**输出前检查清单：**\n12. ✓ 所有花括号 { 和 } 正确配对\n13. ✓ 所有方括号 [ 和 ] 正确配对\n\
+    14. ✓ JSON可以完整解析，没有语法错误\n\n\nStorySpec: {story_spec} StoryBible: {story_bible}\
+    \ 章节标题列表：{chapter_titles}\n你需要生成： 1. 书名：根据小说主题和内容创作一个吸引人的书名（2-8个字） 2. 简介：80-150字的简介，吸引读者但不剧透结局\
+    \ 3. 目录：格式化的章节标题列表\n注意： - 书名要有文学性和吸引力 - 简介要简洁有力，突出核心冲突 - 目录使用\"第X章：标题\"的格式\n"
   expected_output: "严格JSON格式（不要包含JSON之外的文字）： {\n  \"title\": \"书名\",\n  \"introduction\"\
     : \"简介内容（80-150字）\",\n  \"table_of_contents\": [\n    \"第1章：章节标题\",\n    \"第2章：章节标题\"\
     ,\n    \"第3章：章节标题\",\n    \"第4章：章节标题\",\n    \"第5章：章节标题\",\n    \"第6章：章节标题\",\n\
