@@ -6,8 +6,8 @@ from .judge_report import JudgeReport, ScoreBreakdown, Issue
 from .retry_level import RetryLevel, determine_retry_level
 from .chapter_generation_state import ChapterGenerationState
 from .concept import Concept, WorkplaceEcosystem, SuspectPool
-from .chapter import ChapterDraft, ChapterRevision, ChapterOutput
-from .book import BookOutline, NovelMetadata, FinalBook, TruthCard
+from .chapter import ChapterOutput
+from .book import BookOutline, NovelMetadata, TruthCard
 
 __all__ = [
     "StorySpec",
@@ -33,11 +33,8 @@ __all__ = [
     "Concept",
     "WorkplaceEcosystem",
     "SuspectPool",
-    "ChapterDraft",
-    "ChapterRevision",
     "ChapterOutput",
     "BookOutline",
     "NovelMetadata",
-    "FinalBook",
     "TruthCard",
 ]
