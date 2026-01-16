@@ -120,7 +120,9 @@ plan_chapter:
     \ - plot_advancement (情节推进) - exit_hook (出口钩子，如何过渡到下一场) - target_words (字数目标，建议400-600字)\
     \ - notes (备注)\n同时设置章节级别： - chapter_goal: 本章整体目标 - required_emotional_arc: 本章情绪弧线\
     \ - clues_to_plant: (悬疑) 本章要埋设的线索 - clues_to_reveal: (悬疑) 本章要揭示的线索 - plot_points_to_advance:\
-    \ 本章要推进的情节点\n确保场景之间有自然的过渡，节奏紧凑，不拖沓。 每个场景都应该\"三件事同时发生\"：推进事件、揭示信息、触发情绪。\n"
+    \ 本章要推进的情节点\n确保场景之间有自然的过渡，节奏紧凑，不拖沓。 每个场景都应该\"三件事同时发生\"：推进事件、揭示信息、触发情绪。\n\n**⚠️\
+    \ 输出前最后一步：强制验证（必须执行）**\n在输出JSON前，必须验证以下公式：\n验证：abs(sum(scenes[].target_words)\
+    \ - 3000) <= 100\n- 如果验证失败，调整scenes的target_words直到符合要求\n- 只有验证通过后才能输出JSON\n"
   expected_output: "严格JSON格式的SceneList对象： {\n  \"chapter_number\": {chapter_number},\n\
     \  \"chapter_title\": \"...\",\n  \"scenes\": [6-10个Scene对象],\n  \"total_target_words\"\
     : 3000,\n  \"chapter_goal\": \"...\",\n  \"required_emotional_arc\": \"...\",\n\
